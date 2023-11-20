@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints import games
+from app.api.endpoints import games, users
 
 import os
 
@@ -22,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#app.include_router(users.router)
+app.include_router(users.router)
 app.include_router(games.router)
 #app.include_router(reviews.router)
 

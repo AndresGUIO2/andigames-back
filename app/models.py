@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, Numeric
-from sqlalchemy.orm import relationship
+#from sqlalchemy.orm import relationship
 from app.database import Base
 
 class Game(Base):
@@ -23,7 +23,7 @@ class User(Base):
     password = Column(String(72))
     genre = Column(String(1))
     about_me = Column(String(256))
-    birth_date = Column(Date)
+    birthdate = Column(Date)
     username = Column(String(16))
 
 class Review(Base):
@@ -35,20 +35,12 @@ class Review(Base):
     rating = Column(Numeric(2,1))
     commentary = Column(String(256))
 
-class user_follower(Base):
+class User_followers(Base):
     __tablename__= 'user_followers'
-    id = Column(Integer, primary_key=True)
-    user_follower_nickname = Column(String(16), ForeignKey('users.nickname'))
-    user_following_nickname = Column(String(16), ForeignKey('users.nickname'))
+    user_follower_nickname = Column(String(16), ForeignKey('users.nickname'), primary_key=True)
+    user_following_nickname = Column(String(16), ForeignKey('users.nickname'), primary_key=True)
 
-class user_game(Base):
-    __tablename__= 'user_games'
-    id = Column(Integer, primary_key=True)
-    user_nickname = Column(String(16), ForeignKey('users.nickname'))
-    user_game_id = Column(Integer, ForeignKey('games.id'))
-
-class user_wishlist(Base):
-    __tablename__= 'user_wishlists'
-    id = Column(Integer, primary_key=True)
-    game_id = Column(Integer, ForeignKey('games.id'))
-    user_nickname = Column(String(16), ForeignKey('users.nickname'))
+class Users_wishlist(Base):
+    __tablename__= 'users_wishlist'
+    game_id = Column(Integer, ForeignKey('games.id'), primary_key=True)
+    user_nickname = Column(String(16), ForeignKey('users.nickname'), primary_key=True)

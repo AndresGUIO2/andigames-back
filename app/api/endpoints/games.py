@@ -30,3 +30,4 @@ def read_games_by_title(title: str, db: Session = Depends(get_db)):
     db_games = get_games_by_similar_title(db, title=title)
     return db_games
 
+

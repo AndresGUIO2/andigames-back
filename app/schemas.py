@@ -1,8 +1,6 @@
 from pydantic import BaseModel, validator
 from typing import List, Optional, Any
-from sqlalchemy import Numeric
 from datetime import date
-from decimal import Decimal
 
 class GameBase(BaseModel):
     title: str
@@ -13,6 +11,7 @@ class GameBase(BaseModel):
     steam_rating: float
     publisher: str
     detected_technologies: str
+    developer: str
 
 class GameCreate(GameBase):
     platform_rating: float = 0.0
@@ -20,20 +19,11 @@ class GameCreate(GameBase):
 
 class GameRead(GameBase):
     id: int
-    title: str
-    url: str 
-    release_date: str
-    primary_genre: str
-    genres: str
-    steam_rating: float
     platform_rating: float
-    publisher: str
-    detected_technologies: str
 
     class Config:
-        from_attributes = True     #Allows to parse the date from the database to the model
+        from_attributes = True
 
-    #This method is used to parse the date from the database to the model
     @validator('release_date', pre=True)
     def parse_release_date(cls, value):
         if isinstance(value, date):
@@ -50,51 +40,10 @@ class GameUpdate(BaseModel):
     platform_rating: Optional[float]
     publisher: Optional[str]
     detected_technologies: Optional[str]
+    developer: Optional[str]
 
 class GameDetails(GameRead):
     reviews: List['ReviewRead'] = []
-    class Config:
-        from_attributes = True
-
-class UserBase(BaseModel):
-    nickname: str
-    email: str
-    password: str
-    genre: str
-    about_me: str
-    birth_date: str
-    username: str
-
-class UserCreate(UserBase):
-    pass 
-
-class UserRead(UserBase):
-    nickname: str
-    email: str
-    genre: str
-    about_me: str
-    birth_date: str
-    username: str
-
-    class Config:
-        from_attributes = True
-
-class UserUpdate(BaseModel):
-    nickname: Optional[str]
-    email: Optional[str]
-    password: Optional[str]
-    genre: Optional[str]
-    about_me: Optional[str]
-    birth_date: Optional[str]
-    username: Optional[str]
-
-class UserDetails(UserRead):
-    followers: List['UserRead'] = []
-    following: List['UserRead'] = []
-    reviews: List['ReviewRead'] = []
-    games: List['GameRead'] = []
-    wishlist: Optional[List['GameRead']] = [] 
-
     class Config:
         from_attributes = True
 
@@ -109,11 +58,7 @@ class ReviewCreate(ReviewBase):
     pass
 
 class ReviewRead(ReviewBase):
-    game_id: int
-    user_nickname: str
-    review_date: str
-    rating: float
-    commentary: str
+    pass
 
     class Config:
         from_attributes = True
@@ -125,3 +70,63 @@ class ReviewUpdate(BaseModel):
     rating: Optional[float]
     commentary: Optional[str]
 
+class UserBase(BaseModel):
+    nickname: str
+    email: str
+    password: str
+    genre: str
+    about_me: str
+    birthdate: str
+    username: str
+
+class UserSimple(BaseModel):
+    nickname:str
+
+class UserCreate(BaseModel):
+    nickname: str
+    email: str
+    password: str
+    genre: str
+    about_me: str
+    birthdate: date
+    username: str
+
+    @validator('birthdate', pre=True)
+    def parse_birthdate(cls, value):
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        return value
+    
+class UserRead(UserBase):
+    pass
+
+    class Config:
+        from_attributes = True
+
+    @validator('birthdate', pre=True)
+    def parse_birthdate(cls, value):
+        if isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+        return value
+
+class UserUpdate(BaseModel):
+    nickname: Optional[str]
+    email: Optional[str]
+    password: Optional[str]
+    genre: Optional[str]
+    about_me: Optional[str]
+    birthdate: Optional[str]
+    username: Optional[str]
+
+class UserDetails(BaseModel):
+    followers: List['UserSimple'] = []
+    following: List['UserSimple'] = []
+    reviews: List['int'] = []
+    wishlist: Optional[List['int']] = [] 
+
+    class Config:
+        from_attributes = True
+        
+class UserFollower(BaseModel):
+    user_follower_nickname: str
+    user_following_nickname: str
