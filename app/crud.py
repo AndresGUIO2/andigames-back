@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from . import models
 from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead
@@ -27,10 +27,11 @@ def normalize_title(title: str):
     return title
 
 # Get simmilar titles
-def get_games_by_similar_title(db: Session, title: str):
-    search = f"%{title.strip().lower()}%"
+def get_games_by_similar_title(db: Session, title: str, max_distance: int = 5):
+    search = title.strip().lower()
+    
     return db.query(models.Game).filter(
-        models.Game.title.ilike(search)
+        func.levenshtein(func.lower(models.Game.title), search) <= max_distance
     ).all()
 
 # Users
@@ -39,51 +40,33 @@ def get_user_no_password(db: Session, nickname: str):
     query = db.query(models.User).filter(models.User.nickname == nickname).first()
     return query
 
-# Get user details
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
-    # Realizar una consulta unificada
-    result = db.query(
-        models.User,
-        models.User_followers.user_follower_nickname.label('follower_nickname'),
-        models.User_followers.user_following_nickname.label('following_nickname'),
-        models.Review.game_id.label('review_game_id'),
-        models.Users_wishlist.game_id.label('wishlist_game_id')
-    ).outerjoin(models.User_followers, models.User.nickname == models.User_followers.user_following_nickname)\
-    .outerjoin(models.Review, models.User.nickname == models.Review.user_nickname)\
-    .outerjoin(models.Users_wishlist, models.User.nickname == models.Users_wishlist.user_nickname)\
-    .filter(models.User.nickname == user_nickname)\
-    .all()
+    # Obtener información básica del usuario
+    user_data = db.query(models.User).filter(models.User.nickname == user_nickname).first()
 
-    # Procesar los resultados
-    followers = set()
-    following = set()
-    reviews = set()
-    wishlist = set()
+    followers_query = db.query(models.User_followers.user_follower_nickname)\
+                        .filter(models.User_followers.user_following_nickname == user_nickname).all()
+    followers = [follower[0] for follower in followers_query]
 
-    user_data = None
-    for user, follower_nickname, following_nickname, review_game_id, wishlist_game_id in result:
-        if not user_data:
-            user_data = user
-        if follower_nickname:
-            followers.add(follower_nickname)
-        if following_nickname:
-            following.add(following_nickname)
-        if review_game_id:
-            reviews.add(review_game_id)
-        if wishlist_game_id:
-            wishlist.add(wishlist_game_id)
+    following_query = db.query(models.User_followers.user_following_nickname)\
+                        .filter(models.User_followers.user_follower_nickname == user_nickname).all()
+    following = [following[0] for following in following_query]
 
-    # Crear UserDetails
+    reviews_query = db.query(models.Review.id).filter(models.Review.user_nickname == user_nickname).all()
+    reviews = [review[0] for review in reviews_query]
+
+    wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
+    wishlist = [wishlist[0] for wishlist in wishlist_query]
+    
     user_details = UserDetails(
         nickname=user_data.nickname,
         username=user_data.username,
         about_me=user_data.about_me,
         followers=[UserSimple(nickname=f) for f in followers],
         following=[UserSimple(nickname=f) for f in following],
-        reviews=list(reviews),
-        wishlist=list(wishlist)
+        reviews=reviews,
+        wishlist=wishlist
     )
-
     return user_details
 
 # Get followers and following with details 
