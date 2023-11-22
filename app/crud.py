@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from . import models
-from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, FollowerDetails, ReviewRead
+from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -86,37 +86,6 @@ def get_user_details(db: Session, user_nickname: str) -> UserDetails:
 
     return user_details
 
-# Get user details user included
-def get_user_details(db: Session, user_nickname: str) -> UserDetails:
-    # queries
-    user_query = db.query(models.User).filter(models.User.nickname == user_nickname).first()
-    followers_query = db.query(models.User_followers).filter(models.User_followers.user_following_nickname == user_nickname).all()
-    following_query = db.query(models.User_followers).filter(models.User_followers.user_follower_nickname == user_nickname).all()
-    reviews_query = db.query(models.Review.game_id).filter(models.Review.user_nickname == user_nickname).all()
-    wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
-
-    # 
-    nickname = user_query.nickname
-    username = user_query.username
-    about_me = user_query.about_me
-    followers = [UserSimple(nickname=f.user_follower_nickname) for f in followers_query]
-    following = [UserSimple(nickname=f.user_following_nickname) for f in following_query]
-    reviews = [review.game_id for review in reviews_query]
-    wishlist = [wish.game_id for wish in wishlist_query]
-
-    # Create user details
-    user_details = UserDetails(
-        nickname=nickname,
-        username=username,
-        about_me=about_me,
-        followers=followers,
-        following=following,
-        reviews=reviews,
-        wishlist=wishlist
-    )
-    
-    return user_details
-
 # Get followers and following with details 
 def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:
     # Consulta unificada para seguidores y usuarios seguidos
@@ -165,15 +134,12 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
         if review_game_id:
             following[following_nickname]["reviews"].append(review_game_id)
 
-    # Crear la respuesta final
-    follower_details = FollowerDetails(
-        followers=list(followers.values()),
-        following=list(following.values())
-    )
-
-    return follower_details
+    # Crear las listas
+    followers_list = [UserNicknameUsernameReviews(nickname=follower_nickname, username=follower["username"], reviews=[ReviewRead(game_id=review) for review in follower["reviews"]]) for follower_nickname, follower in followers.items()]
+    following_list = [UserNicknameUsernameReviews(nickname=following_nickname, username=following["username"], reviews=[ReviewRead(game_id=review) for review in following["reviews"]]) for following_nickname, following in following.items()]
     
-    
+    # Crear y retornar la instancia de FollowerDetails
+    return FollowerDetails(followers=followers_list, following=following_list)
     
 # Add user to database
 def add_user(db: Session, user: UserCreate):

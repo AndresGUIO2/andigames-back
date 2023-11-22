@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from ...crud import get_user_no_password, get_user_details, add_user, add_follower
-from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower
+from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following
+from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower, FollowerDetails
 from ...dependencies import get_db
 
 router = APIRouter()
@@ -24,21 +24,14 @@ def read_user_details(nickname: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
-#get user details with user included
-@router.get("/users/{nickname}/details/user", response_model=UserDetails)
-def read_user_details_user(nickname: str, db: Session = Depends(get_db)):
-    db_user = get_user_details(db, user_nickname=nickname)
+#get user followers and following
+@router.get("/users/{nickname}/followers&Following", response_model=FollowerDetails)
+def read_user_followers_and_following(nickname: str, db: Session = Depends(get_db)):
+    db_user = get_user_followers_and_following(db, user_nickname=nickname)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
-#get user followers and following
-@router.get("/users/{nickname}/followers", response_model=UserDetails)
-def read_user_followers_and_following(nickname: str, db: Session = Depends(get_db)):
-    db_user = get_user_details(db, user_nickname=nickname)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user
 
 #Add user to database
 @router.post("/users/add/", response_model=UserCreate)

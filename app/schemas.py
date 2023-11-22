@@ -69,9 +69,15 @@ class ReviewUpdate(BaseModel):
     review_date: Optional[str]
     rating: Optional[float]
     commentary: Optional[str]
-    
+ 
+class UserNicknameUsernameReviews(BaseModel):
+    nickname: str
+    username: str
+    reviews: List['ReviewRead'] = []    
+
 class FollowerDetails(BaseModel):
     followers : List['UserNicknameUsernameReviews'] = []
+    following : List['UserNicknameUsernameReviews'] = []
 
 class UserBase(BaseModel):
     nickname: str
@@ -84,11 +90,6 @@ class UserBase(BaseModel):
 
 class UserSimple(BaseModel):
     nickname: str
-    
-class UserNicknameUsernameReviews(BaseModel):
-    nickname: str
-    username: str
-    reviews: List['ReviewRead'] = []    
     
 class UserCreate(BaseModel):
     nickname: str
