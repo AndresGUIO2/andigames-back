@@ -63,6 +63,37 @@ def get_user_details(db: Session, user_nickname: str) -> UserDetails:
     
     return user_details
 
+# Get user details user included
+def get_user_details(db: Session, user_nickname: str) -> UserDetails:
+    # queries
+    user_query = db.query(models.User).filter(models.User.nickname == user_nickname).first()
+    followers_query = db.query(models.User_followers).filter(models.User_followers.user_following_nickname == user_nickname).all()
+    following_query = db.query(models.User_followers).filter(models.User_followers.user_follower_nickname == user_nickname).all()
+    reviews_query = db.query(models.Review.game_id).filter(models.Review.user_nickname == user_nickname).all()
+    wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
+
+    # 
+    nickname = user_query.nickname
+    username = user_query.username
+    about_me = user_query.about_me
+    followers = [UserSimple(nickname=f.user_follower_nickname) for f in followers_query]
+    following = [UserSimple(nickname=f.user_following_nickname) for f in following_query]
+    reviews = [review.game_id for review in reviews_query]
+    wishlist = [wish.game_id for wish in wishlist_query]
+
+    # Create user details
+    user_details = UserDetails(
+        nickname=nickname,
+        username=username,
+        about_me=about_me,
+        followers=followers,
+        following=following,
+        reviews=reviews,
+        wishlist=wishlist
+    )
+    
+    return user_details
+
 # Add user to database
 def add_user(db: Session, user: UserCreate):
     db_user = models.User(nickname=user.nickname, email=user.email, password=user.password, genre=user.genre, about_me=user.about_me, birthdate=user.birthdate, username=user.username)

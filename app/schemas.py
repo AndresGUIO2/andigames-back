@@ -119,6 +119,9 @@ class UserUpdate(BaseModel):
     username: Optional[str]
 
 class UserDetails(BaseModel):
+    nickname: Optional[str]
+    username: Optional[str]
+    about_me: Optional[str]
     followers: List['UserSimple'] = []
     following: List['UserSimple'] = []
     reviews: List['int'] = []

@@ -24,6 +24,14 @@ def read_user_details(nickname: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
+#get user details with user included
+@router.get("/users/{nickname}/details/user", response_model=UserDetails)
+def read_user_details_user(nickname: str, db: Session = Depends(get_db)):
+    db_user = get_user_details(db, user_nickname=nickname)
+    if db_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
 #Add user to database
 @router.post("/users/add/", response_model=UserCreate)
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
