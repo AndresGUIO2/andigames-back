@@ -34,7 +34,7 @@ def read_user_details_user(nickname: str, db: Session = Depends(get_db)):
 
 #get user followers and following
 @router.get("/users/{nickname}/followers", response_model=UserDetails)
-def read_user_followers(nickname: str, db: Session = Depends(get_db)):
+def read_user_followers_and_following(nickname: str, db: Session = Depends(get_db)):
     db_user = get_user_details(db, user_nickname=nickname)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")

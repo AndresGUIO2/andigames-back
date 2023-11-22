@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from . import models
-from .schemas import UserDetails, UserBase, UserSimple, UserCreate, UserFollower, FollowerDetails, ReviewRead
+from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, FollowerDetails, ReviewRead
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -41,42 +41,50 @@ def get_user_no_password(db: Session, nickname: str):
 
 # Get user details
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
-    # Consulta principal para obtener detalles del usuario
-    user_query = db.query(models.User).filter(models.User.nickname == user_nickname).first()
+    # Realizar una consulta unificada
+    result = db.query(
+        models.User,
+        models.User_followers.user_follower_nickname.label('follower_nickname'),
+        models.User_followers.user_following_nickname.label('following_nickname'),
+        models.Review.game_id.label('review_game_id'),
+        models.Users_wishlist.game_id.label('wishlist_game_id')
+    ).outerjoin(models.User_followers, models.User.nickname == models.User_followers.user_following_nickname)\
+    .outerjoin(models.Review, models.User.nickname == models.Review.user_nickname)\
+    .outerjoin(models.Users_wishlist, models.User.nickname == models.Users_wishlist.user_nickname)\
+    .filter(models.User.nickname == user_nickname)\
+    .all()
 
-    # Consulta para obtener seguidores y seguidos
-    followers_and_following_query = db.query(
-        models.User_followers,
-        models.User.nickname,
-        models.User.username
-    ).join(
-        models.User, models.User.nickname == models.User_followers.user_follower_nickname
-    ).filter(
-        or_(
-            models.User_followers.user_following_nickname == user_nickname,
-            models.User_followers.user_follower_nickname == user_nickname
-        )
-    ).all()
+    # Procesar los resultados
+    followers = set()
+    following = set()
+    reviews = set()
+    wishlist = set()
 
-    # Separar seguidores y seguidos
-    followers = [UserSimple(nickname=f.user_follower_nickname) for f in followers_and_following_query if f.user_following_nickname == user_nickname]
-    following = [UserSimple(nickname=f.user_following_nickname) for f in followers_and_following_query if f.user_follower_nickname == user_nickname]
+    user_data = None
+    for user, follower_nickname, following_nickname, review_game_id, wishlist_game_id in result:
+        if not user_data:
+            user_data = user
+        if follower_nickname:
+            followers.add(follower_nickname)
+        if following_nickname:
+            following.add(following_nickname)
+        if review_game_id:
+            reviews.add(review_game_id)
+        if wishlist_game_id:
+            wishlist.add(wishlist_game_id)
 
-    # Consulta para reseñas y lista de deseos (opcionalmente con subconsultas)
-
-    # Creación de UserDetails
+    # Crear UserDetails
     user_details = UserDetails(
-        nickname=user_query.nickname,
-        username=user_query.username,
-        about_me=user_query.about_me,
-        followers=followers,
-        following=following,
-        # Agregar reseñas y lista de deseos aquí
+        nickname=user_data.nickname,
+        username=user_data.username,
+        about_me=user_data.about_me,
+        followers=[UserSimple(nickname=f) for f in followers],
+        following=[UserSimple(nickname=f) for f in following],
+        reviews=list(reviews),
+        wishlist=list(wishlist)
     )
-    
+
     return user_details
-
-
 
 # Get user details user included
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
@@ -110,34 +118,61 @@ def get_user_details(db: Session, user_nickname: str) -> UserDetails:
     return user_details
 
 # Get followers and following with details 
-def get_user_followers(db: Session, user_nickname: str) -> FollowerDetails:
-    # Obtener todos los seguidores y seguidos en una sola consulta
-    followers = db.query(
+def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:
+    # Consulta unificada para seguidores y usuarios seguidos
+    followers_query = db.query(
         models.User_followers.user_follower_nickname, 
         models.User.nickname, 
-        models.User.username
-    ).join(
-        models.User, models.User.nickname == models.User_followers.user_follower_nickname
-    ).filter(
-        models.User_followers.user_following_nickname == user_nickname
-    ).all()
+        models.User.username,
+        models.Review.game_id
+    ).join(models.User, models.User.nickname == models.User_followers.user_follower_nickname)\
+    .outerjoin(models.Review, models.User_followers.user_follower_nickname == models.Review.user_nickname)\
+    .filter(models.User_followers.user_following_nickname == user_nickname)\
+    .all()
 
-    following = db.query(
+    following_query = db.query(
         models.User_followers.user_following_nickname, 
         models.User.nickname, 
-        models.User.username
-    ).join(
-        models.User, models.User.nickname == models.User_followers.user_following_nickname
-    ).filter(
-        models.User_followers.user_follower_nickname == user_nickname
-    ).all()
+        models.User.username,
+        models.Review.game_id
+    ).join(models.User, models.User.nickname == models.User_followers.user_following_nickname)\
+    .outerjoin(models.Review, models.User_followers.user_following_nickname == models.Review.user_nickname)\
+    .filter(models.User_followers.user_follower_nickname == user_nickname)\
+    .all()
+    
+    followers = {}
+    following = {}
 
-    # Procesar los resultados
-    # Aquí podrías utilizar comprensiones de listas o generadores según sea necesario
+    # Procesar seguidores
+    for follower_nickname, nickname, username, review_game_id in followers_query:
+        if follower_nickname not in followers:
+            followers[follower_nickname] = {
+                "nickname": nickname,
+                "username": username,
+                "reviews": []
+            }
+        if review_game_id:
+            followers[follower_nickname]["reviews"].append(review_game_id)
 
-    return FollowerDetails(followers, following)
+    # Procesar seguidos
+    for following_nickname, nickname, username, review_game_id in following_query:
+        if following_nickname not in following:
+            following[following_nickname] = {
+                "nickname": nickname,
+                "username": username,
+                "reviews": []
+            }
+        if review_game_id:
+            following[following_nickname]["reviews"].append(review_game_id)
 
-        
+    # Crear la respuesta final
+    follower_details = FollowerDetails(
+        followers=list(followers.values()),
+        following=list(following.values())
+    )
+
+    return follower_details
+    
     
     
 # Add user to database
