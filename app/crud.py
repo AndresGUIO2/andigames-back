@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from . import models
-from .schemas import UserDetails, UserBase, UserSimple, UserCreate, UserFollower
+from .schemas import UserDetails, UserBase, UserSimple, UserCreate, UserFollower, FollowerDetails, ReviewRead
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -41,27 +41,42 @@ def get_user_no_password(db: Session, nickname: str):
 
 # Get user details
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
-    # queries
-    followers_query = db.query(models.User_followers).filter(models.User_followers.user_following_nickname == user_nickname).all()
-    following_query = db.query(models.User_followers).filter(models.User_followers.user_follower_nickname == user_nickname).all()
-    reviews_query = db.query(models.Review.game_id).filter(models.Review.user_nickname == user_nickname).all()
-    wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
+    # Consulta principal para obtener detalles del usuario
+    user_query = db.query(models.User).filter(models.User.nickname == user_nickname).first()
 
-    # 
-    followers = [UserSimple(nickname=f.user_follower_nickname) for f in followers_query]
-    following = [UserSimple(nickname=f.user_following_nickname) for f in following_query]
-    reviews = [review.game_id for review in reviews_query]
-    wishlist = [wish.game_id for wish in wishlist_query]
+    # Consulta para obtener seguidores y seguidos
+    followers_and_following_query = db.query(
+        models.User_followers,
+        models.User.nickname,
+        models.User.username
+    ).join(
+        models.User, models.User.nickname == models.User_followers.user_follower_nickname
+    ).filter(
+        or_(
+            models.User_followers.user_following_nickname == user_nickname,
+            models.User_followers.user_follower_nickname == user_nickname
+        )
+    ).all()
 
-    # Create user details
+    # Separar seguidores y seguidos
+    followers = [UserSimple(nickname=f.user_follower_nickname) for f in followers_and_following_query if f.user_following_nickname == user_nickname]
+    following = [UserSimple(nickname=f.user_following_nickname) for f in followers_and_following_query if f.user_follower_nickname == user_nickname]
+
+    # Consulta para reseñas y lista de deseos (opcionalmente con subconsultas)
+
+    # Creación de UserDetails
     user_details = UserDetails(
+        nickname=user_query.nickname,
+        username=user_query.username,
+        about_me=user_query.about_me,
         followers=followers,
         following=following,
-        reviews=reviews,
-        wishlist=wishlist
+        # Agregar reseñas y lista de deseos aquí
     )
     
     return user_details
+
+
 
 # Get user details user included
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
@@ -94,6 +109,37 @@ def get_user_details(db: Session, user_nickname: str) -> UserDetails:
     
     return user_details
 
+# Get followers and following with details 
+def get_user_followers(db: Session, user_nickname: str) -> FollowerDetails:
+    # Obtener todos los seguidores y seguidos en una sola consulta
+    followers = db.query(
+        models.User_followers.user_follower_nickname, 
+        models.User.nickname, 
+        models.User.username
+    ).join(
+        models.User, models.User.nickname == models.User_followers.user_follower_nickname
+    ).filter(
+        models.User_followers.user_following_nickname == user_nickname
+    ).all()
+
+    following = db.query(
+        models.User_followers.user_following_nickname, 
+        models.User.nickname, 
+        models.User.username
+    ).join(
+        models.User, models.User.nickname == models.User_followers.user_following_nickname
+    ).filter(
+        models.User_followers.user_follower_nickname == user_nickname
+    ).all()
+
+    # Procesar los resultados
+    # Aquí podrías utilizar comprensiones de listas o generadores según sea necesario
+
+    return FollowerDetails(followers, following)
+
+        
+    
+    
 # Add user to database
 def add_user(db: Session, user: UserCreate):
     db_user = models.User(nickname=user.nickname, email=user.email, password=user.password, genre=user.genre, about_me=user.about_me, birthdate=user.birthdate, username=user.username)

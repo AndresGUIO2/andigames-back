@@ -62,13 +62,16 @@ class ReviewRead(ReviewBase):
 
     class Config:
         from_attributes = True
-
+        
 class ReviewUpdate(BaseModel):
     game_id: Optional[int]
     user_nickname: Optional[str]
     review_date: Optional[str]
     rating: Optional[float]
     commentary: Optional[str]
+    
+class FollowerDetails(BaseModel):
+    followers : List['UserSimple'] = []
 
 class UserBase(BaseModel):
     nickname: str
@@ -81,6 +84,8 @@ class UserBase(BaseModel):
 
 class UserSimple(BaseModel):
     nickname:str
+    username: Optional[str]
+    reviews : Optional[List['int']] = []
 
 class UserCreate(BaseModel):
     nickname: str
