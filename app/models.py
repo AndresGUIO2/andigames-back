@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, Numeric
 #from sqlalchemy.orm import relationship
 from app.database import Base
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class Game(Base):
     __tablename__ = 'games'
@@ -15,7 +18,7 @@ class Game(Base):
     publisher = Column(String)
     detected_technologies = Column(String)
     developer = Column(String)
-
+    
 class User(Base):
     __tablename__ = 'users'
     nickname = Column(String(16), primary_key=True)
@@ -25,6 +28,12 @@ class User(Base):
     about_me = Column(String(256))
     birthdate = Column(Date)
     username = Column(String(16))
+    
+    def verify_password(self, password):
+        return pwd_context.verify(password, self.password)
+    
+    def hash_password(self, plain_password):
+        self.password = pwd_context.hash(plain_password)
 
 class Review(Base):
     __tablename__ = 'reviews'

@@ -82,7 +82,6 @@ class FollowerDetails(BaseModel):
 class UserBase(BaseModel):
     nickname: str
     email: str
-    password: str
     genre: str
     about_me: str
     birthdate: str
@@ -138,7 +137,13 @@ class UserDetails(BaseModel):
 
     class Config:
         from_attributes = True
-        
+                       
 class UserFollower(BaseModel):
     user_follower_nickname: str
     user_following_nickname: str
+
+
+#Auth
+class Token(BaseModel):
+    access_token: str
+    token_type: str

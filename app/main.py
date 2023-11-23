@@ -1,9 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import games, users
-
 import os
-
 # variables s
 from dotenv import load_dotenv
 
@@ -12,12 +10,12 @@ app = FastAPI()
 # CORS configuration
 origins = {
     "http://localhost",
-    
+    "https://andigames-front-ejeemf3qo-natandreli.vercel.app"   
 }
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],    
     allow_headers=["*"],
@@ -29,6 +27,7 @@ app.include_router(games.router)
 
 # Here we load the .env file
 load_dotenv()
+
 
 if __name__ == "__main__":
     import uvicorn

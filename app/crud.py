@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from . import models
 from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead
+from .models import User
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -71,7 +72,7 @@ def get_user_details(db: Session, user_nickname: str) -> UserDetails:
 
 # Get followers and following with details 
 def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:
-    # Consulta unificada para seguidores y usuarios seguidos
+
     followers_query = db.query(
         models.User_followers.user_follower_nickname, 
         models.User.nickname, 
@@ -95,7 +96,6 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
     followers = {}
     following = {}
 
-    # Procesar seguidores
     for follower_nickname, nickname, username, review_game_id in followers_query:
         if follower_nickname not in followers:
             followers[follower_nickname] = {
@@ -106,7 +106,6 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
         if review_game_id:
             followers[follower_nickname]["reviews"].append(review_game_id)
 
-    # Procesar seguidos
     for following_nickname, nickname, username, review_game_id in following_query:
         if following_nickname not in following:
             following[following_nickname] = {
@@ -117,15 +116,15 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
         if review_game_id:
             following[following_nickname]["reviews"].append(review_game_id)
 
-    # Crear las listas
     followers_list = [UserNicknameUsernameReviews(nickname=follower_nickname, username=follower["username"], reviews=[ReviewRead(game_id=review) for review in follower["reviews"]]) for follower_nickname, follower in followers.items()]
     following_list = [UserNicknameUsernameReviews(nickname=following_nickname, username=following["username"], reviews=[ReviewRead(game_id=review) for review in following["reviews"]]) for following_nickname, following in following.items()]
     
-    # Crear y retornar la instancia de FollowerDetails
     return FollowerDetails(followers=followers_list, following=following_list)
     
 # Add user to database
 def add_user(db: Session, user: UserCreate):
+    user.hash_password(user.password)
+    
     db_user = models.User(nickname=user.nickname, email=user.email, password=user.password, genre=user.genre, about_me=user.about_me, birthdate=user.birthdate, username=user.username)
     db.add(db_user)
     db.commit()
@@ -139,5 +138,7 @@ def add_follower(db: Session, followerData: UserFollower):
     db.commit()
     db.refresh(db_follower)
     return db_follower
+
+
 
     
