@@ -5,6 +5,9 @@ import os
 # variables s
 from dotenv import load_dotenv
 
+# Here we load the .env file
+load_dotenv()
+
 app = FastAPI()
 
 # CORS configuration
@@ -25,10 +28,6 @@ app.add_middleware(
 app.include_router(users.router)
 app.include_router(games.router)
 #app.include_router(reviews.router)
-
-# Here we load the .env file
-load_dotenv()
-
 
 if __name__ == "__main__":
     import uvicorn

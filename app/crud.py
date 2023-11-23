@@ -123,9 +123,8 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
     
 # Add user to database
 def add_user(db: Session, user: UserCreate):
-    user.hash_password(user.password)
-    
     db_user = models.User(nickname=user.nickname, email=user.email, password=user.password, genre=user.genre, about_me=user.about_me, birthdate=user.birthdate, username=user.username)
+    db_user.hash_password(user.password)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
