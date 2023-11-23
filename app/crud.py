@@ -38,7 +38,7 @@ def get_games_by_similar_title(db: Session, title: str, max_distance: int = 5):
 # Users
 # Get one user by nickname
 def get_user_no_password(db: Session, nickname: str):
-    query = db.query(models.User).filter(models.User.nickname == nickname).first()
+    query =  db.query(models.User).filter(models.User.nickname == nickname).first()
     return query
 
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
