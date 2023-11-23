@@ -10,7 +10,8 @@ app = FastAPI()
 # CORS configuration
 origins = {
     "http://localhost",
-    "https://andigames-front-ejeemf3qo-natandreli.vercel.app"   
+    "https://andigames-front-ejeemf3qo-natandreli.vercel.app",
+    "https://andigames-front.vercel.app"   
 }
 
 app.add_middleware(
