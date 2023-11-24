@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy.exc import OperationalError
+from sqlalchemy import func, desc
+from time import sleep
 from . import models
 from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead
 from .models import User
@@ -22,18 +24,29 @@ def get_game(db: Session, game_id: int):
 def get_game_by_title_exact(db: Session, title: str):
     return db.query(models.Game).filter(models.Game.title == title).first()
 
-# Normalize title
-def normalize_title(title: str):
-    title = title.translate(str.maketrans('', '', 'string.punctuation'))
-    return title
-
-# Get simmilar titles
-def get_games_by_similar_title(db: Session, title: str, max_distance: int = 5):
+def get_games_by_similar_title(db: Session, title: str, max_distance: int = 5, limit: int = 10):
     search = title.strip().lower()
-    
-    return db.query(models.Game).filter(
+
+    # Simmilar games
+    similar_games = db.query(
+        models.Game,
+        func.levenshtein(func.lower(models.Game.title), search).label('levenshtein_distance')
+    ).filter(
         func.levenshtein(func.lower(models.Game.title), search) <= max_distance
-    ).all()
+    ).limit(limit).all()
+
+    # Calculate developer frequency
+    developer_frequency = {}
+    for game, _ in similar_games:
+        developer_frequency[game.developer] = developer_frequency.get(game.developer, 0) + 1
+
+    # Order by levenshtein distance and developer frequency
+    sorted_games = sorted(
+        similar_games,
+        key=lambda x: (x[1], -developer_frequency[x[0].developer])
+    )
+
+    return [game for game, _ in sorted_games]
 
 # Users
 # Get one user by nickname
@@ -42,33 +55,44 @@ def get_user_no_password(db: Session, nickname: str):
     return query
 
 def get_user_details(db: Session, user_nickname: str) -> UserDetails:
-    # Obtener información básica del usuario
-    user_data = db.query(models.User).filter(models.User.nickname == user_nickname).first()
-
-    followers_query = db.query(models.User_followers.user_follower_nickname)\
-                        .filter(models.User_followers.user_following_nickname == user_nickname).all()
-    followers = [follower[0] for follower in followers_query]
-
-    following_query = db.query(models.User_followers.user_following_nickname)\
-                        .filter(models.User_followers.user_follower_nickname == user_nickname).all()
-    following = [following[0] for following in following_query]
-
-    reviews_query = db.query(models.Review.id).filter(models.Review.user_nickname == user_nickname).all()
-    reviews = [review[0] for review in reviews_query]
-
-    wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
-    wishlist = [wishlist[0] for wishlist in wishlist_query]
     
-    user_details = UserDetails(
-        nickname=user_data.nickname,
-        username=user_data.username,
-        about_me=user_data.about_me,
-        followers=[UserSimple(nickname=f) for f in followers],
-        following=[UserSimple(nickname=f) for f in following],
-        reviews=reviews,
-        wishlist=wishlist
-    )
-    return user_details
+    max_retries = 3
+    retries = 0
+    
+    while retries < max_retries:        
+        try:
+            user_data = db.query(models.User).filter(models.User.nickname == user_nickname).first()
+            
+            followers_query = db.query(models.User_followers.user_follower_nickname)\
+                                .filter(models.User_followers.user_following_nickname == user_nickname).all()
+            followers = [follower[0] for follower in followers_query]
+            
+            following_query = db.query(models.User_followers.user_following_nickname)\
+                                .filter(models.User_followers.user_follower_nickname == user_nickname).all()
+            following = [following[0] for following in following_query]
+
+            reviews_query = db.query(models.Review.id).filter(models.Review.user_nickname == user_nickname).all()
+            reviews = [review[0] for review in reviews_query]
+
+            wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
+            wishlist = [wishlist[0] for wishlist in wishlist_query]
+            
+            user_details = UserDetails(
+                nickname=user_data.nickname,
+                username=user_data.username,
+                about_me=user_data.about_me,
+                followers=[UserSimple(nickname=f) for f in followers],
+                following=[UserSimple(nickname=f) for f in following],
+                reviews=reviews,
+                wishlist=wishlist
+            )
+            return user_details
+        
+        except OperationalError:
+            retries +=1
+            sleep(0.25)
+            
+    return {"error": "Database error after 3 retries"}
 
 # Get followers and following with details 
 def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:

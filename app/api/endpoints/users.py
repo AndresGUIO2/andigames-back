@@ -17,7 +17,8 @@ router = APIRouter()
             response_model=UserRead,
             summary="Obtener un usuario dado su nickname exacto",
             description="Esta ruta te permite obtener un usuario dado su nickname exacto.",
-            response_description="Retorna los datos del usuario (excepto la contraseña) con el nickname dado."
+            response_description="Retorna los datos del usuario (excepto la contraseña) con el nickname dado.",
+            tags=["Users"]
 )
 def read_user(nickname: str, db: Session = Depends(get_db)):
     db_user = get_user_no_password(db, nickname=nickname)
@@ -30,7 +31,8 @@ def read_user(nickname: str, db: Session = Depends(get_db)):
     "/users/{nickname}/details", 
     response_model=UserDetails,
     summary="Obtener los detalles de un usuario",
-    description="Esta ruta te permite obtener los detalles de un usuario."
+    description="Esta ruta te permite obtener los detalles de un usuario.",
+    tags=["Users"]
 )
 def read_user_details(nickname: str, db: Session = Depends(get_db)):
     db_user = get_user_details(db, user_nickname=nickname)
@@ -44,7 +46,8 @@ def read_user_details(nickname: str, db: Session = Depends(get_db)):
     response_model=FollowerDetails,
     summary="Obtener los seguidores y seguidos de un usuario",
     description="Esta ruta te permite obtener los seguidores y seguidos de un usuario.",
-    response_description="Retorna los seguidores y seguidos de un usuario específico"
+    response_description="Retorna los seguidores y seguidos de un usuario específico",
+    tags=["Users"]
 )
 def read_user_followers_and_following(nickname: str, db: Session = Depends(get_db)):
     db_user = get_user_followers_and_following(db, user_nickname=nickname)
@@ -58,6 +61,7 @@ def read_user_followers_and_following(nickname: str, db: Session = Depends(get_d
     summary="Registrar un nuevo usuario",
     description="Esta ruta te permite registrar un nuevo usuario en la base de datos.",
     response_description="Retorna el username(nickname) del usuario registrado",
+    tags=["Users"]
 )
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     db_user = get_user_no_password(db, nickname=user_data.nickname)
@@ -71,6 +75,7 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     response_model=UserFollower,
     summary="Agregar un seuidor a un usuario, se lleva a cabo por el usuario que sigue",
     description="El usuario que sigue debe estar autenticado para seguir a alguien",
+    tags=["Users, AUTH"]
 )
 def create_follower(nickname: str, follower: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     
@@ -89,7 +94,7 @@ def create_follower(nickname: str, follower: str, db: Session = Depends(get_db),
     return add_follower(db=db, followerData=user_data)
 
 #Auth
-@router.post("/users/login", response_model=Token)
+@router.post("/users/login", response_model=Token, tags=["AUTH"])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.nickname == form_data.username).first()
     if not user or not user.verify_password(form_data.password):
