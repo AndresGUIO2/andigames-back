@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -75,21 +75,35 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.put(
     "/users/{nickname}/update",
-    response_model=UserUpdate,
+    response_model=UserUpdate, 
     summary="Actualizar los datos de un usuario necesita autenticación",
-    description="Esta ruta te permite actualizar los datos de un usuario. El usuario deberá tener un token de autenticación correspondiente a sus datos.",
+    description="Esta ruta te permite actualizar los datos de un usuario. El usuario deberá validar su contraseña actual para realizar la actualización.",
     response_description="Retorna los datos del usuario actualizados",
     tags=["Users"]
 )
-def update_user(nickname: str, user_data: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_user(
+    nickname: str, 
+    user_data: UserUpdate, 
+    password: str = Body(...),
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     if current_user.nickname != nickname:
         raise HTTPException(status_code=403, detail="User not authorized")
-        
+    
     db_user = db.query(User).filter(User.nickname == nickname).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-        
-    return update_user_data(db=db, user=user_data)
+    
+    if not db_user.verify_password(password):
+        raise HTTPException(status_code=400, detail="Password is incorrect")
+
+    #if password is correct then update user data
+    updated_user = update_user_data(db=db, user_nickname=nickname, user=user_data)
+    if updated_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return updated_user 
 
 
 #Add follower to user

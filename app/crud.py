@@ -154,29 +154,28 @@ def add_user(db: Session, user: UserCreate):
     db.refresh(db_user)
     return db_user
 
-def update_user_data(db: Session, user: UserUpdate):
-    existing_user = db.query(models.User).filter(nickname=user.nickname).first()
+def update_user_data(db: Session, user_nickname: str, user: UserUpdate):
+    existing_user = db.query(models.User).filter(models.User.nickname == user_nickname).first()
 
-    if existing_user:
-        if user.email:
-            existing_user.email = user.email
-        if user.password:
-            pass
-        if user.genre:
-            existing_user.genre = user.genre
-        if user.about_me:
-            existing_user.about_me = user.about_me
-        if user.birthdate:
-            existing_user.birthdate = user.birthdate
-        if user.username:
-            existing_user.username = user.username
-
-        db.commit()
-        db.refresh(existing_user) 
-
-        return existing_user
-    else:
+    if not existing_user:
         return None
+
+    if user.email is not None:
+        existing_user.email = user.email
+    if user.genre is not None:
+        existing_user.genre = user.genre
+    if user.about_me is not None:
+        existing_user.about_me = user.about_me
+    if user.birthdate is not None:
+        existing_user.birthdate = user.birthdate
+    if user.username is not None:
+        existing_user.username = user.username
+
+    db.commit()
+    db.refresh(existing_user) 
+
+    return existing_user
+
 
 def add_follower(db: Session, followerData: UserFollower):
     db_follower = models.User_followers(user_follower_nickname=followerData.user_follower_nickname, user_following_nickname=followerData.user_following_nickname)

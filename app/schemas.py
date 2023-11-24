@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, EmailStr
 from typing import List, Optional, Any
 from datetime import date
 from passlib.context import CryptContext
@@ -121,16 +121,11 @@ class UserRead(UserBase):
         return value
 
 class UserUpdate(BaseModel):
-    nickname: Optional[str] = None
-    email: Optional[str] = None
-    password: Optional[str] = None
+    email: Optional[EmailStr] = None
     genre: Optional[str] = None
     about_me: Optional[str] = None
-    birthdate: Optional[str] = None
+    birthdate: Optional[date] = None
     username: Optional[str] = None
-
-    def hash_password(self, plain_password):
-        self.password = pwd_context.hash(plain_password)
 
 class UserDetails(BaseModel):
     nickname: Optional[str]
