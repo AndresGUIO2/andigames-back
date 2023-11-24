@@ -3,7 +3,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
 from . import models
-from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead
+from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate
 from .models import User
 
 # Get one game by id
@@ -154,7 +154,30 @@ def add_user(db: Session, user: UserCreate):
     db.refresh(db_user)
     return db_user
 
-# Add follower to a user in database
+def update_user_data(db: Session, user: UserUpdate):
+    existing_user = db.query(models.User).filter(nickname=user.nickname).first()
+
+    if existing_user:
+        if user.email:
+            existing_user.email = user.email
+        if user.password:
+            pass
+        if user.genre:
+            existing_user.genre = user.genre
+        if user.about_me:
+            existing_user.about_me = user.about_me
+        if user.birthdate:
+            existing_user.birthdate = user.birthdate
+        if user.username:
+            existing_user.username = user.username
+
+        db.commit()
+        db.refresh(existing_user) 
+
+        return existing_user
+    else:
+        return None
+
 def add_follower(db: Session, followerData: UserFollower):
     db_follower = models.User_followers(user_follower_nickname=followerData.user_follower_nickname, user_following_nickname=followerData.user_following_nickname)
     db.add(db_follower)

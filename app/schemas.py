@@ -1,6 +1,9 @@
 from pydantic import BaseModel, validator
 from typing import List, Optional, Any
 from datetime import date
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class GameBase(BaseModel):
     title: str
@@ -118,13 +121,16 @@ class UserRead(UserBase):
         return value
 
 class UserUpdate(BaseModel):
-    nickname: Optional[str]
-    email: Optional[str]
-    password: Optional[str]
-    genre: Optional[str]
-    about_me: Optional[str]
-    birthdate: Optional[str]
-    username: Optional[str]
+    nickname: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    genre: Optional[str] = None
+    about_me: Optional[str] = None
+    birthdate: Optional[str] = None
+    username: Optional[str] = None
+
+    def hash_password(self, plain_password):
+        self.password = pwd_context.hash(plain_password)
 
 class UserDetails(BaseModel):
     nickname: Optional[str]
