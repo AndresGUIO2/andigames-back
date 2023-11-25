@@ -32,6 +32,17 @@ class GameRead(GameBase):
         if isinstance(value, date):
             return value.strftime("%Y-%m-%d")
         return value
+    
+class GamePrediction(BaseModel):
+    title: str
+    developer: str
+    publisher: str
+    primary_genre: str
+    genres: str
+    steam_rating: float
+    platform_rating: float
+    detected_technologies: str
+    award_names: List[str]
 
 class GameUpdate(BaseModel):
     title: Optional[str]
@@ -57,8 +68,19 @@ class ReviewBase(BaseModel):
     rating: float
     commentary: str
 
-class ReviewCreate(ReviewBase):
-    pass
+class ReviewCreate(BaseModel):
+    game_id: int
+    user_nickname: str
+    review_date: date
+    rating: float
+    commentary: str
+    
+    @validator('review_date', pre=True)
+    def parse_review_date(cls, value):
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        return value
+    
 
 class ReviewRead(ReviewBase):
     pass
@@ -142,6 +164,11 @@ class UserDetails(BaseModel):
 class UserFollower(BaseModel):
     user_follower_nickname: str
     user_following_nickname: str
+    
+class AwardBase(BaseModel):
+    name: str
+    description: str
+    category: str
 
 
 #Auth

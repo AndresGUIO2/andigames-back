@@ -3,13 +3,14 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data
+from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data, create_numpy_arrays
 from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower, FollowerDetails, Token
 from ...dependencies import get_db, get_async_db
 from ...config import settings
 from datetime import datetime, timedelta
 from ...models import User
 from ...api.auth import create_access_token, get_current_user
+import numpy as np
 
 router = APIRouter()
 
@@ -151,3 +152,24 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     print(user, access_token)
     # Devuelve el access token, el tipo de token, y el nickname del usuario
     return {"access_token": access_token, "token_type": "bearer", "nickname": user.nickname}
+
+
+
+# Tests
+@router.get("/users/{nickname}/game_array", 
+            summary="Obtener el arreglo de juegos de un usuario",
+            description="Esta ruta te permite obtener el arreglo de juegos de un usuario basado en sus reseñas y juegos similares.",
+            response_description="Retorna un arreglo de juegos en formato JSON.",
+            tags=["Users"]
+)
+async def get_user_game_array(nickname: str, db: AsyncSession = Depends(get_async_db)):
+    # Obtén el arreglo de Numpy para el usuario
+    numpy_array = await create_numpy_arrays(db, nickname)
+
+    # Convierte el arreglo de Numpy a JSON (lista de Python)
+    json_array = numpy_array_to_json(numpy_array)
+
+    return json_array
+
+def numpy_array_to_json(array: np.ndarray) -> List:
+    return array.tolist()

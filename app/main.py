@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.endpoints import games, users
+from app.api.endpoints import games, users, reviews
 import os
 # variables s
 from dotenv import load_dotenv
@@ -15,7 +15,8 @@ origins = {
     "http://localhost/",
     "https://andigames-front-ejeemf3qo-natandreli.vercel.app/",
     "https://andigames-front.vercel.app/",
-    "https://andigames.online/"   
+    "https://andigames.online/",
+    "https://andigames.online" 
 }
 
 app.add_middleware(
@@ -28,7 +29,7 @@ app.add_middleware(
 
 app.include_router(users.router)
 app.include_router(games.router)
-#app.include_router(reviews.router)
+app.include_router(reviews.router)
 
 if __name__ == "__main__":
     import uvicorn

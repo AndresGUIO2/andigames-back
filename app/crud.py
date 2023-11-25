@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import asyncio
@@ -6,8 +6,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
 from . import models
-from .schemas import UserDetails, UserBase, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate
-from .models import User
+from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate
+import numpy as np
+from typing import List
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -27,13 +28,9 @@ def get_game(db: Session, game_id: int):
 def get_game_by_title_exact(db: Session, title: str):
     return db.query(models.Game).filter(models.Game.title == title).first()
 
-from sqlalchemy import select, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from . import models
-
-async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance: int = 30, limit: int = 10):
+async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance: int = 40, limit: int = 10):
     search_words = title.strip().lower().split()
- 
+
     stmt = select(models.Game)
 
     # Filter by keyword presence using ILIKE
@@ -45,6 +42,7 @@ async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance:
         func.levenshtein(func.lower(models.Game.title), word) for word in search_words
     )
 
+    # Add the sum as a column to the query
     stmt = stmt.add_columns(
         levenshtein_sum.label('total_levenshtein_distance')
     ).group_by(models.Game.id)
@@ -56,7 +54,7 @@ async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance:
     stmt = stmt.order_by('total_levenshtein_distance').limit(limit)
 
     # Execute the query asynchronously
-    result =  await db.execute(stmt)
+    result = await db.execute(stmt)
     games_with_distances = result.all()
 
     # Calculate developer frequency
@@ -65,17 +63,81 @@ async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance:
         game = game_with_distances[0]
         developer_frequency[game.developer] = developer_frequency.get(game.developer, 0) + 1
 
-    # Order by the cumulative Levenshtein distance and developer frequency
+    # Order primarily by developer frequency, and secondarily by the cumulative Levenshtein distance
     sorted_games = sorted(
         games_with_distances,
         key=lambda game_tuple: (
-            game_tuple[-1],  # Cumulative Levenshtein distance
-            -developer_frequency[game_tuple[0].developer]  # Developer frequency
+            -developer_frequency[game_tuple[0].developer],  # Negative for descending order
+            game_tuple[-1]  # Cumulative Levenshtein distance
         )
     )
 
     # Return only the Game objects from the sorted list
     return [game_tuple[0] for game_tuple in sorted_games]
+
+
+async def get_games_prediction(db: AsyncSession, title: str, max_distance: int = 40, limit: int = 50):
+    search_words = title.strip().lower().split()
+
+    # Parte 1: Encontrar títulos de juegos similares
+    stmt = select(models.Game.title)
+
+    for word in search_words:
+        stmt = stmt.filter(models.Game.title.ilike(f"%{word}%"))
+
+    levenshtein_sum = sum(
+        func.levenshtein(func.lower(models.Game.title), word) for word in search_words
+    )
+
+    stmt = stmt.add_columns(
+        levenshtein_sum.label('total_levenshtein_distance')
+    ).group_by(models.Game.title)
+
+    stmt = stmt.having(levenshtein_sum <= max_distance * len(search_words))
+    stmt = stmt.order_by('total_levenshtein_distance').limit(limit)
+
+    result = await db.execute(stmt)
+    titles = result.scalars().all()
+
+    # Parte 2: Obtener detalles de estos juegos
+    games_details_stmt = select(
+        models.Game.title,
+        models.Game.primary_genre,
+        models.Game.genres,
+        models.Game.steam_rating,
+        models.Game.platform_rating,
+        models.Game.publisher,
+        models.Game.detected_technologies,
+        models.Game.developer,
+        models.Award.name.label('award_names')
+    ).outerjoin(models.Game_awards, models.Game.id == models.Game_awards.game_id
+    ).outerjoin(models.Award, models.Game_awards.award_id == models.Award.id
+    ).where(models.Game.title.in_(titles))
+
+    detail_result = await db.execute(games_details_stmt)
+    detail_rows = detail_result.all()
+
+    games_temp = {}
+    for row in detail_rows:
+        if row.title not in games_temp:
+            games_temp[row.title] = {
+                'title': row.title,
+                'primary_genre': row.primary_genre,
+                'genres': row.genres,
+                'steam_rating': row.steam_rating,
+                'platform_rating': row.platform_rating,
+                'publisher': row.publisher,
+                'detected_technologies': row.detected_technologies,
+                'developer': row.developer,
+                'award_names': set()
+            }
+        if row.award_names:
+            games_temp[row.title]['award_names'].add(row.award_names)
+
+    games_predictions = [GamePrediction(**game) for game in games_temp.values()]
+
+    return games_predictions
+
 
 
 # Users
@@ -224,7 +286,7 @@ def update_user_data(db: Session, user_nickname: str, user: UserUpdate):
 
     return existing_user
 
-
+# Add follower to database
 def add_follower(db: Session, followerData: UserFollower):
     db_follower = models.User_followers(user_follower_nickname=followerData.user_follower_nickname, user_following_nickname=followerData.user_following_nickname)
     db.add(db_follower)
@@ -232,6 +294,160 @@ def add_follower(db: Session, followerData: UserFollower):
     db.refresh(db_follower)
     return db_follower
 
+async def add_review_by_nickname(db: AsyncSession, review: ReviewCreate, user_nickname: str):
+    db_review = models.Review(game_id=review.game_id, user_nickname=user_nickname, review_date=review.review_date, rating=review.rating, commentary=review.commentary)
+    db.add(db_review)
+    await db.commit()
+    await db.refresh(db_review)
+    return db_review
+
+#tests
+async def get_user_reviews_games(db: AsyncSession, user_nickname: str):
+
+    GameAlias = aliased(models.Game)
+    AwardsAlias = aliased(models.Award)
+
+    query = (
+        select(
+            GameAlias.title,
+            GameAlias.primary_genre,
+            GameAlias.genres,
+            GameAlias.steam_rating,
+            GameAlias.platform_rating,
+            GameAlias.publisher,
+            GameAlias.detected_technologies,
+            GameAlias.developer,
+            AwardsAlias.name.label('award_names')
+        )
+        .join(models.Review, models.Review.game_id == GameAlias.id)  # Unir Review con Game
+        .outerjoin(models.Game_awards, GameAlias.id == models.Game_awards.game_id)  # Unir Game_awards con Game
+        .outerjoin(AwardsAlias, models.Game_awards.award_id == AwardsAlias.id)  # Unir Awards con Game_awards
+        .filter(models.Review.user_nickname == user_nickname)  # Filtro para las reseñas del usuario
+        .filter(models.Review.rating > 7)  # Filtrar reseñas con calificación alta
+    )
+        
+    result = await db.execute(query)
+    rows = result.all()
+
+    games_temp = {}
+    for row in rows:
+        if row.title not in games_temp:
+            games_temp[row.title] = {
+                'title': row.title,
+                'primary_genre': row.primary_genre,
+                'genres': row.genres,
+                'steam_rating': row.steam_rating,
+                'platform_rating': row.platform_rating,
+                'publisher': row.publisher,
+                'detected_technologies': row.detected_technologies,
+                'developer': row.developer,
+                'award_names': set() if row.award_names else set()
+            }
+        if row.award_names:
+            games_temp[row.title]['award_names'].add(row.award_names)
 
 
+    games_predictions = [GamePrediction(**game) for game in games_temp.values()]
+    
+    return games_predictions
+
+
+def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engines_mapping, award_categories_mapping):
+    # Si la calificación en nuestra plataforma es 0, usa la calificación de Steam
+    rating = float(game.steam_rating) 
+    rating = rating 
+    
+    genres_array = np.zeros(len(genres_mapping))
+    for genre in game.genres.split(','):
+        if genre in genres_mapping:
+            genres_array[genres_mapping[genre]] = 1
+            
+    primary_genres_array = np.zeros(len(genres_mapping))
+    if game.primary_genre in genres_mapping:
+        primary_genres_array[genres_mapping[game.primary_genre]] = 1
+            
+    game_engines_array = np.zeros(len(game_engines_mapping))
+    for engine in game.detected_technologies:
+        if engine in game_engines_mapping:
+            game_engines_array[game_engines_mapping[engine]] = 1
+
+    award_categories_array = np.zeros(len(award_categories_mapping))
+    for award in game.award_names:
+        if award in award_categories_mapping:
+            award_categories_array[award_categories_mapping[award]] = 1
+
+    # Concatenar todos los arrays en un único array unidimensional
+    game_array = np.concatenate([
+        [rating], 
+        primary_genres_array, 
+        genres_array, 
+        game_engines_array, 
+        award_categories_array
+    ])
+    
+    return game_array
+
+
+
+async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
+    # Obtener los juegos reseñados por el usuario
+    games1 = await get_user_reviews_games(db, user_nickname)
+
+    all_games = []
+    all_games.extend(games1)
+
+    # Obtener y añadir juegos similares
+    for game in games1:
+        similar_games = await get_games_prediction(db, game.title, 40, 12)
+        for similar_game in similar_games:
+            if similar_game not in all_games:  # Evitar duplicados
+                all_games.append(similar_game)
+    
+    # Mapeos para géneros, motores de juegos y categorías de premios
+    genres = [
+        "Early Access", "Sports", "Indie", "Game Development", "Utilities",
+        "Massively Multiplayer", "Video Production", "Racing", "Audio Production",
+        "Sexual Content", "Gore", "Action", "Free to Play", "Adventure", "RPG",
+        "Design & Illustration", "Unknown Genre", "Strategy", "Web Publishing",
+        "Violent", "Nudity", "Education", "Simulation", "Casual"
+    ]
+    genres_mapping = {genre: index for index, genre in enumerate(genres)}
+    
+    game_engines = [
+    "Source2", "Construct", "RPGMaker", "Love2D", "RealVirtuality", "HashLink",
+    "RenPy", "C4_Engine", "Phyre", "REDengine", "Flexi", "OGRE", "Unigine",
+    "Torque", "Lime_OR_OpenFL", "idTech3", "Wintermute", "idTech4", "Danmakufu",
+    "Amazon_Lumberyard", "BlenderGameEngine", "AdventureGameStudio", "Marmalade",
+    "idTech6", "AppGameKit", "X-Ray", "Source", "Asura", "ApexEngine", "Phaser",
+    "PlayFirstPlayground", "Kex", "Diesel", "TyranoBuilder", "CryEngine", "WolfRPGEditor",
+    "XNA", "UbisoftAnvil", "idTech2", "RAGE", "Godot", "Prism3D", "Defold",
+    "Infinity", "Aurora", "TelltaleTool", "Virtools", "idTech2_5", "idTech7",
+    "VisionaireStudio", "KiriKiri", "Glacier", "Clausewitz", "UbiArtFramework",
+    "HaemimontSol", "Frostbite", "Build", "Vision", "FNA", "GoldSource", "NScripter",
+    "ChromeEngine", "GameGuru", "Liquid", "4A_Engine", "Snowdrop", "Cocos", "Unity",
+    "Bitsquid", "VisualNovelMaker", "Adobe_AIR", "idTech5", "RE_Engine", "MonoGame",
+    "Unreal", "GameMaker", "Solar2D", "ClickTeamFusion", "Pico8"
+    ]
+    game_engines_mapping = {engine: index for index, engine in enumerate(game_engines)}
+    
+    award_categories = [
+    "Best Game Direction", "Best Independent Game", "Best Art Direction",
+    "Best Multiplayer Game", "Games for Impact", "Best Narrative",
+    "Best Audio Design", "Game of the Year", "Best Score/Music",
+    "Best Performance"
+    ]
+    award_categories_mapping = {category: index for index, category in enumerate(award_categories)}
+    
+    
+    numpy_arrays = [create_numpy_array_for_game(game, genres_mapping, game_engines_mapping, award_categories_mapping).flatten() for game in all_games]
+
+    # Concatenar todos los arrays en un único array bidimensional
+    if numpy_arrays:
+        combined_array = np.vstack(numpy_arrays)
+    else:
+        combined_array = np.array([])
+
+    return combined_array
+    
+    
     

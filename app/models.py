@@ -5,6 +5,11 @@ from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Numeric, Date
+
+Base = declarative_base()
+
 class Game(Base):
     __tablename__ = 'games'
     id = Column(Integer, primary_key=True)
@@ -18,6 +23,22 @@ class Game(Base):
     publisher = Column(String)
     detected_technologies = Column(String)
     developer = Column(String)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'url': self.url,
+            'release_date': self.release_date.isoformat() if self.release_date else None,
+            'primary_genre': self.primary_genre,
+            'genres': self.genres,
+            'steam_rating': float(self.steam_rating) if self.steam_rating is not None else None,
+            'platform_rating': float(self.platform_rating) if self.platform_rating is not None else None,
+            'publisher': self.publisher,
+            'detected_technologies': self.detected_technologies,
+            'developer': self.developer
+        }
+
     
 class User(Base):
     __tablename__ = 'users'
@@ -43,6 +64,19 @@ class Review(Base):
     review_date = Column(Date)
     rating = Column(Numeric(2,1))
     commentary = Column(String(256))
+    
+class Award(Base):
+    __tablename__ = 'awards'
+    id = Column(Integer, primary_key=True)
+    name= Column(String(64))
+    description = Column(String(256))
+    category = Column(String(64))
+    
+class Game_awards(Base):
+    __tablename__ = 'game_awards'
+    game_id = Column(Integer, ForeignKey('games.id'), primary_key=True)
+    award_id = Column(Integer, ForeignKey('awards.id'), primary_key=True)
+    year = Column(Integer)
 
 class User_followers(Base):
     __tablename__= 'user_followers'
