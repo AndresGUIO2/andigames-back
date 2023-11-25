@@ -23,11 +23,11 @@ class User(Base):
     __tablename__ = 'users'
     nickname = Column(String(16), primary_key=True)
     email = Column(String(64))
-    password = Column(String(72))
+    password = Column(String(64))
     genre = Column(String(1))
     about_me = Column(String(256))
     birthdate = Column(Date)
-    username = Column(String(16))
+    username = Column(String(17))
     
     def verify_password(self, password):
         return pwd_context.verify(password, self.password)

@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data
 from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower, FollowerDetails, Token
-from ...dependencies import get_db 
+from ...dependencies import get_db, get_async_db
 from ...config import settings
 from datetime import datetime, timedelta
 from ...models import User
@@ -20,8 +21,8 @@ router = APIRouter()
             response_description="Retorna los datos del usuario (excepto la contraseña) con el nickname dado.",
             tags=["Users"]
 )
-def read_user(nickname: str, db: Session = Depends(get_db)):
-    db_user = get_user_no_password(db, nickname=nickname)
+async def read_user(nickname: str, db: Session = Depends(get_async_db)):
+    db_user = await get_user_no_password(db, nickname=nickname)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
@@ -35,10 +36,11 @@ def read_user(nickname: str, db: Session = Depends(get_db)):
     description="Esta ruta te permite obtener los detalles de un usuario.",
     tags=["Users"]
 )
-def read_user_details(nickname: str, db: Session = Depends(get_db)):
-    db_user = get_user_details(db, user_nickname=nickname)
+async def read_user_details(nickname: str, db: AsyncSession = Depends(get_async_db)):
+    db_user = await get_user_details(db, user_nickname=nickname)
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    
     return db_user
 
 
@@ -67,10 +69,10 @@ def read_user_followers_and_following(nickname: str, db: Session = Depends(get_d
     tags=["Users"]
 )
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    db_user = get_user_no_password(db, nickname=user_data.nickname)
+    db_user = db.query(User).filter(User.nickname == user_data.nickname).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Nickname already registered")    
-    return add_user(db=db, user=user_data.nickname)
+    return add_user(db=db, user=user_data)
 
 
 @router.put(
@@ -145,4 +147,5 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.nickname}, expires_delta=access_token_expires
     )
+    print(user, access_token)
     return {"access_token": access_token, "token_type": "bearer"}

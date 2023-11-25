@@ -1,4 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+import asyncio
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
@@ -24,73 +27,118 @@ def get_game(db: Session, game_id: int):
 def get_game_by_title_exact(db: Session, title: str):
     return db.query(models.Game).filter(models.Game.title == title).first()
 
-def get_games_by_similar_title(db: Session, title: str, max_distance: int = 5, limit: int = 10):
-    search = title.strip().lower()
+from sqlalchemy import select, func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from . import models
 
-    # Simmilar games
-    similar_games = db.query(
-        models.Game,
-        func.levenshtein(func.lower(models.Game.title), search).label('levenshtein_distance')
-    ).filter(
-        func.levenshtein(func.lower(models.Game.title), search) <= max_distance
-    ).limit(limit).all()
+async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance: int = 30, limit: int = 10):
+    search_words = title.strip().lower().split()
+
+    stmt = select(models.Game)
+
+    # Filter by keyword presence using ILIKE
+    for word in search_words:
+        stmt = stmt.filter(models.Game.title.ilike(f"%{word}%"))
+
+    # Calculate Levenshtein distance for each word and sum them
+    levenshtein_sum = sum(
+        func.levenshtein(func.lower(models.Game.title), word) for word in search_words
+    )
+
+    stmt = stmt.add_columns(
+        levenshtein_sum.label('total_levenshtein_distance')
+    ).group_by(models.Game.id)
+
+    # Apply having clause to filter games based on cumulative Levenshtein distance
+    stmt = stmt.having(levenshtein_sum <= max_distance * len(search_words))
+
+    # Order by the cumulative Levenshtein distance
+    stmt = stmt.order_by('total_levenshtein_distance').limit(limit)
+
+    # Execute the query asynchronously
+    result =  await db.execute(stmt)
+    games_with_distances = result.all()
 
     # Calculate developer frequency
     developer_frequency = {}
-    for game, _ in similar_games:
+    for game_with_distances in games_with_distances:
+        game = game_with_distances[0]
         developer_frequency[game.developer] = developer_frequency.get(game.developer, 0) + 1
 
-    # Order by levenshtein distance and developer frequency
+    # Order by the cumulative Levenshtein distance and developer frequency
     sorted_games = sorted(
-        similar_games,
-        key=lambda x: (x[1], -developer_frequency[x[0].developer])
+        games_with_distances,
+        key=lambda game_tuple: (
+            game_tuple[-1],  # Cumulative Levenshtein distance
+            -developer_frequency[game_tuple[0].developer]  # Developer frequency
+        )
     )
 
-    return [game for game, _ in sorted_games]
+    # Return only the Game objects from the sorted list
+    return [game_tuple[0] for game_tuple in sorted_games]
+
 
 # Users
 # Get one user by nickname
-def get_user_no_password(db: Session, nickname: str):
-    query =  db.query(models.User).filter(models.User.nickname == nickname).first()
-    return query
+async def get_user_no_password(db: AsyncSession, nickname: str):
+    query = select(models.User).where(models.User.nickname == nickname)
+    result = await db.execute(query)
+    user = result.scalars().first()
+    print(user)
+    return user
 
-def get_user_details(db: Session, user_nickname: str) -> UserDetails:
+
+async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
     
     max_retries = 3
     retries = 0
     
     while retries < max_retries:        
         try:
-            user_data = db.query(models.User).filter(models.User.nickname == user_nickname).first()
             
-            followers_query = db.query(models.User_followers.user_follower_nickname)\
-                                .filter(models.User_followers.user_following_nickname == user_nickname).all()
-            followers = [follower[0] for follower in followers_query]
-            
-            following_query = db.query(models.User_followers.user_following_nickname)\
-                                .filter(models.User_followers.user_follower_nickname == user_nickname).all()
-            following = [following[0] for following in following_query]
+            async with db.begin():
+                # get user date
+                user_query = select(models.User).filter(models.User.nickname == user_nickname)
+                user_result = await db.execute(user_query)
+                user_data = user_result.scalar_one_or_none()
+                
+                # Get followers for user data
+                followers_query = select(models.User_followers.user_follower_nickname)\
+                                    .filter(models.User_followers.user_following_nickname == user_nickname)
+                followers_result = await db.execute(followers_query)
+                followers = [follower[0] for follower in followers_result.scalars().all()]
+                
+                # get following for user data
+                following_query = select(models.User_followers.user_following_nickname)\
+                                    .filter(models.User_followers.user_follower_nickname == user_nickname)
+                following_result = await db.execute(following_query)
+                following = [following[0] for following in following_result.scalars().all()]
 
-            reviews_query = db.query(models.Review.id).filter(models.Review.user_nickname == user_nickname).all()
-            reviews = [review[0] for review in reviews_query]
+                # Get user reviews
+                reviews_query = select(models.Review.id).filter(models.Review.user_nickname == user_nickname)
+                reviews_result = await db.execute(reviews_query)
+                reviews = [review[0] for review in reviews_result.scalars().all()]
 
-            wishlist_query = db.query(models.Users_wishlist.game_id).filter(models.Users_wishlist.user_nickname == user_nickname).all()
-            wishlist = [wishlist[0] for wishlist in wishlist_query]
-            
-            user_details = UserDetails(
-                nickname=user_data.nickname,
-                username=user_data.username,
-                about_me=user_data.about_me,
-                followers=[UserSimple(nickname=f) for f in followers],
-                following=[UserSimple(nickname=f) for f in following],
-                reviews=reviews,
-                wishlist=wishlist
-            )
-            return user_details
+                # get user wishlist
+                wishlist_query = select(models.Users_wishlist.game_id)\
+                                    .filter(models.Users_wishlist.user_nickname == user_nickname)
+                wishlist_result = await db.execute(wishlist_query)
+                wishlist = [wishlist[0] for wishlist in wishlist_result.scalars().all()]
+                
+                user_details = UserDetails(
+                    nickname=user_data.nickname,
+                    username=user_data.username,
+                    about_me=user_data.about_me,
+                    followers=[UserSimple(nickname=f) for f in followers],
+                    following=[UserSimple(nickname=f) for f in following],
+                    reviews=reviews,
+                    wishlist=wishlist
+                )
+                return user_details
         
         except OperationalError:
-            retries +=1
-            sleep(0.25)
+            retries += 1
+            await asyncio.sleep(0.25)
             
     return {"error": "Database error after 3 retries"}
 
