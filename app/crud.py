@@ -179,7 +179,7 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
                 # Get user reviews
                 reviews_query = select(models.Review.id).filter(models.Review.user_nickname == user_nickname)
                 reviews_result = await db.execute(reviews_query)
-                reviews = [review[0] for review in reviews_result.scalars().all()]
+                reviews = [review for review in reviews_result.scalars().all()]
 
                 # get user wishlist
                 wishlist_query = select(models.Users_wishlist.game_id)\
