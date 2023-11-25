@@ -147,5 +147,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.nickname}, expires_delta=access_token_expires
     )
+    # Imprimir en consola (esto se puede remover en producción)
     print(user, access_token)
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Devuelve el access token, el tipo de token, y el nickname del usuario
+    return {"access_token": access_token, "token_type": "bearer", "nickname": user.nickname}

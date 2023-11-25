@@ -33,7 +33,7 @@ from . import models
 
 async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance: int = 30, limit: int = 10):
     search_words = title.strip().lower().split()
-
+ 
     stmt = select(models.Game)
 
     # Filter by keyword presence using ILIKE
