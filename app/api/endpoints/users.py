@@ -154,7 +154,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer", "nickname": user.nickname}
 
 
-
 # Tests
 @router.get("/users/{nickname}/game_array", 
             summary="Obtener el arreglo de juegos de un usuario",

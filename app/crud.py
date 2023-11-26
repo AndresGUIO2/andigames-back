@@ -76,8 +76,13 @@ async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance:
     return [game_tuple[0] for game_tuple in sorted_games]
 
 
-async def get_games_prediction(db: AsyncSession, title: str, max_distance: int = 40, limit: int = 50):
+async def get_games_prediction(db: AsyncSession, title: str, max_distance: int = 40, limit: int = 12):
     search_words = title.strip().lower().split()
+    
+    #Eliminamos números solos
+    for word in search_words:
+        if word.isdigit():
+            search_words.remove(word)
 
     # Parte 1: Encontrar títulos de juegos similares
     stmt = select(models.Game.title)
@@ -137,7 +142,6 @@ async def get_games_prediction(db: AsyncSession, title: str, max_distance: int =
     games_predictions = [GamePrediction(**game) for game in games_temp.values()]
 
     return games_predictions
-
 
 
 # Users
@@ -386,7 +390,6 @@ def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engin
     ])
     
     return game_array
-
 
 
 async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
