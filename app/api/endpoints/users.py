@@ -139,7 +139,7 @@ def update_user(
 )
 def create_follower(nickname: str, follower: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     
-    if current_user.nickname != nickname:
+    if current_user.nickname != follower:
         raise HTTPException(status_code=403, detail="User not authorized")
     
     db_user = get_user_no_password(db, nickname=nickname)
