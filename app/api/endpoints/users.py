@@ -79,8 +79,18 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="You must be +18 years old")
     
     # We only accept nicknames with letters, numbers and one underscore and >= 3 characters
-    if not user_data.nickname.isalnum() or user_data.nickname.count("_") > 1 or len(user_data.nickname) < 3:
-        raise HTTPException(status_code=400, detail="Nickname must be alphanumeric and contain only one underscore. Must be at least 3 characters long")
+
+    if not user_data.nickname.replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Nickname must be alphanumeric.")
+
+    # Verifica que haya solo un guión bajo.
+    if user_data.nickname.count("_") > 1:
+        raise HTTPException(status_code=400, detail="Nickname must contain only one underscore.")
+
+    # Verifica que el apodo tenga al menos tres caracteres.
+    if len(user_data.nickname) < 3:
+        raise HTTPException(status_code=400, detail="Nickname must be at least 3 characters long.")
+
     
     # username must to be >= 3 characters
     if len(user_data.username) < 3:
