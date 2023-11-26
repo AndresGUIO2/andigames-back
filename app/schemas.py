@@ -82,11 +82,13 @@ class ReviewCreate(BaseModel):
         return value
     
 
-class ReviewRead(ReviewBase):
-    pass
+class ReviewRead(BaseModel):
+    game_id: int
+    user_nickname: Optional[str] = None
+    review_date: Optional[date] = None
+    rating: Optional[int] = None
+    commentary: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
 class ReviewUpdate(BaseModel):
     game_id: Optional[int]
