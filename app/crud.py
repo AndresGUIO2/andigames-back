@@ -9,6 +9,7 @@ from . import models
 from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate
 import numpy as np
 from typing import List
+from . import utils
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -146,6 +147,14 @@ async def get_games_prediction(db: AsyncSession, title: str, max_distance: int =
 
 # Users
 # Get one user by nickname
+
+async def gett_all_games_as_predictions(db: AsyncSession):
+    query = select(models.Game)
+    result = await db.execute(query)
+    games = result.scalars().all()
+    games_predictions = [GamePrediction(**game) for game in games]
+    return games_predictions
+
 async def get_user_no_password(db: AsyncSession, nickname: str):
     query = select(models.User).where(models.User.nickname == nickname)
     result = await db.execute(query)
@@ -266,7 +275,7 @@ def add_user(db: Session, user: UserCreate):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return db_user
+    return db_user.nickname
 
 def update_user_data(db: Session, user_nickname: str, user: UserUpdate):
     existing_user = db.query(models.User).filter(models.User.nickname == user_nickname).first()
@@ -306,6 +315,52 @@ async def add_review_by_nickname(db: AsyncSession, review: ReviewCreate, user_ni
     return db_review
 
 #tests
+async def get_all_games_as_predictions(db: AsyncSession):
+    GameAlias = aliased(models.Game)
+    AwardsAlias = aliased(models.Award)
+
+    # Consulta para seleccionar todos los juegos y sus premios asociados
+    query = (
+        select(
+            GameAlias.title,
+            GameAlias.primary_genre,
+            GameAlias.genres,
+            GameAlias.steam_rating,
+            GameAlias.platform_rating,
+            GameAlias.publisher,
+            GameAlias.detected_technologies,
+            GameAlias.developer,
+            AwardsAlias.name.label('award_names')
+        )
+        .outerjoin(models.Game_awards, GameAlias.id == models.Game_awards.game_id)  # Unir Game_awards con Game
+        .outerjoin(AwardsAlias, models.Game_awards.award_id == AwardsAlias.id)  # Unir Awards con Game_awards
+        .group_by(GameAlias.title, AwardsAlias.name)
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    games_temp = {}
+    for row in rows:
+        if row.title not in games_temp:
+            games_temp[row.title] = {
+                'title': row.title,
+                'primary_genre': row.primary_genre,
+                'genres': row.genres,
+                'steam_rating': row.steam_rating,
+                'platform_rating': row.platform_rating,
+                'publisher': row.publisher,
+                'detected_technologies': row.detected_technologies,
+                'developer': row.developer,
+                'award_names': set()
+            }
+        if row.award_names:
+            games_temp[row.title]['award_names'].add(row.award_names)
+
+    games_predictions = [GamePrediction(**game) for game in games_temp.values()]
+
+    return games_predictions
+
 async def get_user_reviews_games(db: AsyncSession, user_nickname: str):
 
     GameAlias = aliased(models.Game)
@@ -355,9 +410,57 @@ async def get_user_reviews_games(db: AsyncSession, user_nickname: str):
     
     return games_predictions
 
+async def get_user_whishlist_games(db: AsyncSession, user_nickname: str):
+    
+        GameAlias = aliased(models.Game)
+        AwardsAlias = aliased(models.Award)
+    
+        query = (
+            select(
+                GameAlias.title,
+                GameAlias.primary_genre,
+                GameAlias.genres,
+                GameAlias.steam_rating,
+                GameAlias.platform_rating,
+                GameAlias.publisher,
+                GameAlias.detected_technologies,
+                GameAlias.developer,
+                AwardsAlias.name.label('award_names')
+            )
+            .join(models.Users_wishlist, models.Users_wishlist.game_id == GameAlias.id)  # Unir Users_wishlist con Game
+            .outerjoin(models.Game_awards, GameAlias.id == models.Game_awards.game_id)  # Unir Game_awards con Game
+            .outerjoin(AwardsAlias, models.Game_awards.award_id == AwardsAlias.id)  # Unir Awards con Game_awards
+            .filter(models.Users_wishlist.user_nickname == user_nickname)  # Filtro para las reseñas del usuario
+        )
+            
+        result = await db.execute(query)
+        rows = result.all()
+    
+        games_temp = {}
+        for row in rows:
+            if row.title not in games_temp:
+                games_temp[row.title] = {
+                    'title': row.title,
+                    'primary_genre': row.primary_genre,
+                    'genres': row.genres,
+                    'steam_rating': row.steam_rating,
+                    'platform_rating': row.platform_rating,
+                    'publisher': row.publisher,
+                    'detected_technologies': row.detected_technologies,
+                    'developer': row.developer,
+                    'award_names': set() if row.award_names else set()
+                }
+            if row.award_names:
+                games_temp[row.title]['award_names'].add(row.award_names)
+    
+    
+        games_predictions = [GamePrediction(**game) for game in games_temp.values()]
+        
+        return games_predictions
+
 
 def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engines_mapping, award_categories_mapping):
-    # Si la calificación en nuestra plataforma es 0, usa la calificación de Steam
+    #In the future it will be used our rating
     rating = float(game.steam_rating) 
     rating = rating 
     
@@ -393,52 +496,31 @@ def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engin
 
 
 async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
-    # Obtener los juegos reseñados por el usuario
     games1 = await get_user_reviews_games(db, user_nickname)
+    games2 = await get_user_whishlist_games(db, user_nickname)
 
     all_games = []
     all_games.extend(games1)
+    all_games.extend(games2)
 
-    # Obtener y añadir juegos similares
+   
     for game in games1:
         similar_games = await get_games_prediction(db, game.title, 40, 12)
         for similar_game in similar_games:
             if similar_game not in all_games:  # Evitar duplicados
                 all_games.append(similar_game)
+                
+    for game in games2:
+        similar_games = await get_games_prediction(db, game.title, 40, 12)
     
-    # Mapeos para géneros, motores de juegos y categorías de premios
-    genres = [
-        "Early Access", "Sports", "Indie", "Game Development", "Utilities",
-        "Massively Multiplayer", "Video Production", "Racing", "Audio Production",
-        "Sexual Content", "Gore", "Action", "Free to Play", "Adventure", "RPG",
-        "Design & Illustration", "Unknown Genre", "Strategy", "Web Publishing",
-        "Violent", "Nudity", "Education", "Simulation", "Casual"
-    ]
+    # Mapping
+    genres = utils.genres
     genres_mapping = {genre: index for index, genre in enumerate(genres)}
     
-    game_engines = [
-    "Source2", "Construct", "RPGMaker", "Love2D", "RealVirtuality", "HashLink",
-    "RenPy", "C4_Engine", "Phyre", "REDengine", "Flexi", "OGRE", "Unigine",
-    "Torque", "Lime_OR_OpenFL", "idTech3", "Wintermute", "idTech4", "Danmakufu",
-    "Amazon_Lumberyard", "BlenderGameEngine", "AdventureGameStudio", "Marmalade",
-    "idTech6", "AppGameKit", "X-Ray", "Source", "Asura", "ApexEngine", "Phaser",
-    "PlayFirstPlayground", "Kex", "Diesel", "TyranoBuilder", "CryEngine", "WolfRPGEditor",
-    "XNA", "UbisoftAnvil", "idTech2", "RAGE", "Godot", "Prism3D", "Defold",
-    "Infinity", "Aurora", "TelltaleTool", "Virtools", "idTech2_5", "idTech7",
-    "VisionaireStudio", "KiriKiri", "Glacier", "Clausewitz", "UbiArtFramework",
-    "HaemimontSol", "Frostbite", "Build", "Vision", "FNA", "GoldSource", "NScripter",
-    "ChromeEngine", "GameGuru", "Liquid", "4A_Engine", "Snowdrop", "Cocos", "Unity",
-    "Bitsquid", "VisualNovelMaker", "Adobe_AIR", "idTech5", "RE_Engine", "MonoGame",
-    "Unreal", "GameMaker", "Solar2D", "ClickTeamFusion", "Pico8"
-    ]
+    game_engines = utils.game_engines
     game_engines_mapping = {engine: index for index, engine in enumerate(game_engines)}
     
-    award_categories = [
-    "Best Game Direction", "Best Independent Game", "Best Art Direction",
-    "Best Multiplayer Game", "Games for Impact", "Best Narrative",
-    "Best Audio Design", "Game of the Year", "Best Score/Music",
-    "Best Performance"
-    ]
+    award_categories = utils.award_categories
     award_categories_mapping = {category: index for index, category in enumerate(award_categories)}
     
     

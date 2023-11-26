@@ -63,7 +63,7 @@ def read_user_followers_and_following(nickname: str, db: Session = Depends(get_d
 
 @router.post(
     "/register",
-    response_model=UserCreate,
+    response_model=str,
     summary="Registrar un nuevo usuario",
     description="Esta ruta te permite registrar un nuevo usuario en la base de datos.",
     response_description="Retorna el username(nickname) del usuario registrado",
@@ -72,7 +72,24 @@ def read_user_followers_and_following(nickname: str, db: Session = Depends(get_d
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.nickname == user_data.nickname).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Nickname already registered")    
+        raise HTTPException(status_code=400, detail="Nickname already registered")
+    
+    # It must to be +18 years old
+    if (datetime.now().date() - user_data.birthdate).days < 6570:
+        raise HTTPException(status_code=400, detail="You must be +18 years old")
+    
+    # We only accept nicknames with letters, numbers and one underscore and >= 3 characters
+    if not user_data.nickname.isalnum() or user_data.nickname.count("_") > 1 or len(user_data.nickname) < 3:
+        raise HTTPException(status_code=400, detail="Nickname must be alphanumeric and contain only one underscore. Must be at least 3 characters long")
+    
+    # username must to be >= 3 characters
+    if len(user_data.username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters long")
+    
+    #password must to be >= 8 characters
+    if len(user_data.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    
     return add_user(db=db, user=user_data)
 
 
@@ -91,6 +108,9 @@ def update_user(
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    
+    print(current_user.nickname)
+    
     if current_user.nickname != nickname:
         raise HTTPException(status_code=403, detail="User not authorized")
     
@@ -148,7 +168,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": user.nickname}, expires_delta=access_token_expires
     )
-    # Imprimir en consola (esto se puede remover en producción)
     print(user, access_token)
     # Devuelve el access token, el tipo de token, y el nickname del usuario
     return {"access_token": access_token, "token_type": "bearer", "nickname": user.nickname}
