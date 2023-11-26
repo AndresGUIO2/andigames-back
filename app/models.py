@@ -39,7 +39,6 @@ class Game(Base):
             'developer': self.developer
         }
 
-    
 class User(Base):
     __tablename__ = 'users'
     nickname = Column(String(16), primary_key=True)

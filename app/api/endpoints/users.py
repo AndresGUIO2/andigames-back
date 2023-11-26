@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data, create_numpy_arrays
+from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data, create_numpy_arrays, delete_follower
 from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower, FollowerDetails, Token
 from ...dependencies import get_db, get_async_db
 from ...config import settings
@@ -152,6 +152,29 @@ def create_follower(nickname: str, follower: str, db: Session = Depends(get_db),
     user_data : UserFollower = UserFollower(user_follower_nickname=follower, user_following_nickname=nickname)
     
     return add_follower(db=db, followerData=user_data)
+
+
+@router.delete(
+        "/users/{nickname}/followers/delete/users/{follower}", 
+        response_model=UserFollower,
+        summary="Eliminar un seguidor a un usuario, se lleva a cabo por el usuario que sigue quien debe estar autenticado",
+        description="El usuario que sigue debe estar autenticado para dejar de seguir a alguien",
+        tags=["Users"]
+    )
+async def delete_follower(nickname: str, follower: str, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):   
+        if current_user.nickname != follower:
+            raise HTTPException(status_code=403, detail="User not authorized")
+        
+        db_user = await get_user_no_password(db, nickname=nickname)
+        db_follower = await get_user_no_password(db, nickname=follower)
+        if db_user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if db_follower is None:
+            raise HTTPException(status_code=404, detail="Follower not found")
+        
+        user_data : UserFollower = UserFollower(user_follower_nickname=follower, user_following_nickname=nickname)
+        
+        return await delete_follower(db=db, followerData=user_data)
 
 
 #Auth

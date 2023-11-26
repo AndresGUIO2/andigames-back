@@ -6,7 +6,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
 from . import models
-from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate, GamePredictionTrain
+from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate, GamePredictionTrain, ReviewUpdate
 import numpy as np
 from typing import List
 from . import utils
@@ -29,6 +29,7 @@ def get_game(db: Session, game_id: int):
 # Get one game by title
 def get_game_by_title_exact(db: Session, title: str):
     return db.query(models.Game).filter(models.Game.title == title).first()
+
 
 async def get_games_by_similar_title(db: AsyncSession, title: str, max_distance: int = 40, limit: int = 10):
     search_words = title.strip().lower().split()
@@ -145,6 +146,7 @@ async def get_games_prediction(db: AsyncSession, title: str, max_distance: int =
 
     return games_predictions
 
+
 # Users
 # Get one user by nickname
 async def get_user_no_password(db: AsyncSession, nickname: str):
@@ -156,7 +158,6 @@ async def get_user_no_password(db: AsyncSession, nickname: str):
 
 
 async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
-    
     max_retries = 3
     retries = 0
     
@@ -209,6 +210,7 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
             
     return {"error": "Database error after 3 retries"}
 
+
 # Get followers and following with details 
 def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:
 
@@ -260,6 +262,7 @@ def get_user_followers_and_following(db: Session, user_nickname: str) -> Followe
     
     return FollowerDetails(followers=followers_list, following=following_list)
     
+    
 # Add user to database
 def add_user(db: Session, user: UserCreate):
     db_user = models.User(nickname=user.nickname, email=user.email, password=user.password, genre=user.genre, about_me=user.about_me, birthdate=user.birthdate, username=user.username)
@@ -268,6 +271,7 @@ def add_user(db: Session, user: UserCreate):
     db.commit()
     db.refresh(db_user)
     return db_user.nickname
+
 
 def update_user_data(db: Session, user_nickname: str, user: UserUpdate):
     existing_user = db.query(models.User).filter(models.User.nickname == user_nickname).first()
@@ -291,7 +295,8 @@ def update_user_data(db: Session, user_nickname: str, user: UserUpdate):
 
     return existing_user
 
-# Add follower to database
+
+# Followers
 def add_follower(db: Session, followerData: UserFollower):
     db_follower = models.User_followers(user_follower_nickname=followerData.user_follower_nickname, user_following_nickname=followerData.user_following_nickname)
     db.add(db_follower)
@@ -299,12 +304,74 @@ def add_follower(db: Session, followerData: UserFollower):
     db.refresh(db_follower)
     return db_follower
 
+
+async def delete_follower(db: AsyncSession, followerData: UserFollower):
+    query = select(models.User_followers).filter(models.User_followers.user_follower_nickname == followerData.user_follower_nickname).filter(models.User_followers.user_following_nickname == followerData.user_following_nickname)
+    result = await db.execute(query)
+    follower = result.scalars().first()
+    return follower
+
+
+#Reviews
 async def add_review_by_nickname(db: AsyncSession, review: ReviewCreate, user_nickname: str):
+    
+    #revisamos que no haya una reseña con el mismo juego y usuario
+    query = select(models.Review).filter(models.Review.game_id == review.game_id).filter(models.Review.user_nickname == user_nickname)
+    result = await db.execute(query)
+    db_review = result.scalars().first()
+    if db_review is not None:
+        return None
+    
     db_review = models.Review(game_id=review.game_id, user_nickname=user_nickname, review_date=review.review_date, rating=review.rating, commentary=review.commentary)
     db.add(db_review)
     await db.commit()
     await db.refresh(db_review)
     return db_review
+
+
+async def get_user_reviews(db: AsyncSession, user_nickname: str):
+    query = select(models.Review).filter(models.Review.user_nickname == user_nickname)
+    result = await db.execute(query)
+    reviews = result.scalars().all()
+    return reviews
+
+
+async def get_user_review(db: AsyncSession, user_nickname: str, review_id: int):
+    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.id == review_id)
+    result = await db.execute(query)
+    review = result.scalars().first()
+    return review
+
+
+async def delete_review(db: AsyncSession, user_nickname: str, review_id: int):
+    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.id == review_id)
+    result = await db.execute(query)
+    review = result.scalars().first()
+    return review
+
+
+async def update_review(db: AsyncSession, user_nickname: str, review_id: int, review: ReviewUpdate):
+    existing_review = await get_user_review(db, user_nickname, review_id)
+
+    if not existing_review:
+        return None
+
+    if review.game_id is not None:
+        existing_review.game_id = review.game_id
+    if review.user_nickname is not None:
+        existing_review.user_nickname = review.user_nickname
+    if review.review_date is not None:
+        existing_review.review_date = review.review_date
+    if review.rating is not None:
+        existing_review.rating = review.rating
+    if review.commentary is not None:
+        existing_review.commentary = review.commentary
+
+    await db.commit()
+    await db.refresh(existing_review) 
+
+    return existing_review
+
 
 #tests
 async def get_all_games_as_predictions(db: AsyncSession):
