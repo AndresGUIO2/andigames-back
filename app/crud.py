@@ -6,10 +6,11 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
 from . import models
-from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate
+from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate, GamePredictionTrain
 import numpy as np
 from typing import List
 from . import utils
+import faiss
 
 # Get one game by id
 def get_game(db: Session, game_id: int):
@@ -144,17 +145,8 @@ async def get_games_prediction(db: AsyncSession, title: str, max_distance: int =
 
     return games_predictions
 
-
 # Users
 # Get one user by nickname
-
-async def gett_all_games_as_predictions(db: AsyncSession):
-    query = select(models.Game)
-    result = await db.execute(query)
-    games = result.scalars().all()
-    games_predictions = [GamePrediction(**game) for game in games]
-    return games_predictions
-
 async def get_user_no_password(db: AsyncSession, nickname: str):
     query = select(models.User).where(models.User.nickname == nickname)
     result = await db.execute(query)
@@ -172,7 +164,7 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
         try:
             
             async with db.begin():
-                # get user date
+                # get user data
                 user_query = select(models.User).filter(models.User.nickname == user_nickname)
                 user_result = await db.execute(user_query)
                 user_data = user_result.scalar_one_or_none()
@@ -181,7 +173,7 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
                 followers_query = select(models.User_followers.user_follower_nickname)\
                                     .filter(models.User_followers.user_following_nickname == user_nickname)
                 followers_result = await db.execute(followers_query)
-                followers = [follower[0] for follower in followers_result.scalars().all()]
+                followers = [follower for follower in followers_result.scalars().all()]
                 
                 # get following for user data
                 following_query = select(models.User_followers.user_following_nickname)\
@@ -190,7 +182,7 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
                 following = [following[0] for following in following_result.scalars().all()]
 
                 # Get user reviews
-                reviews_query = select(models.Review.id).filter(models.Review.user_nickname == user_nickname)
+                reviews_query = select(models.Review.game_id).filter(models.Review.user_nickname == user_nickname)
                 reviews_result = await db.execute(reviews_query)
                 reviews = [review for review in reviews_result.scalars().all()]
 
@@ -322,6 +314,7 @@ async def get_all_games_as_predictions(db: AsyncSession):
     # Consulta para seleccionar todos los juegos y sus premios asociados
     query = (
         select(
+            GameAlias.id,
             GameAlias.title,
             GameAlias.primary_genre,
             GameAlias.genres,
@@ -334,7 +327,7 @@ async def get_all_games_as_predictions(db: AsyncSession):
         )
         .outerjoin(models.Game_awards, GameAlias.id == models.Game_awards.game_id)  # Unir Game_awards con Game
         .outerjoin(AwardsAlias, models.Game_awards.award_id == AwardsAlias.id)  # Unir Awards con Game_awards
-        .group_by(GameAlias.title, AwardsAlias.name)
+        .group_by(GameAlias.id, GameAlias.title, AwardsAlias.name)
     )
 
     result = await db.execute(query)
@@ -344,6 +337,7 @@ async def get_all_games_as_predictions(db: AsyncSession):
     for row in rows:
         if row.title not in games_temp:
             games_temp[row.title] = {
+                'id': row.id, 
                 'title': row.title,
                 'primary_genre': row.primary_genre,
                 'genres': row.genres,
@@ -357,7 +351,7 @@ async def get_all_games_as_predictions(db: AsyncSession):
         if row.award_names:
             games_temp[row.title]['award_names'].add(row.award_names)
 
-    games_predictions = [GamePrediction(**game) for game in games_temp.values()]
+    games_predictions = [GamePredictionTrain(**game) for game in games_temp.values()]
 
     return games_predictions
 
@@ -461,7 +455,7 @@ async def get_user_whishlist_games(db: AsyncSession, user_nickname: str):
 
 def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engines_mapping, award_categories_mapping):
     #In the future it will be used our rating
-    rating = float(game.steam_rating) 
+    rating = float(game.steam_rating) * 0.005
     rating = rating 
     
     genres_array = np.zeros(len(genres_mapping))
@@ -484,6 +478,40 @@ def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engin
             award_categories_array[award_categories_mapping[award]] = 1
 
     # Concatenar todos los arrays en un único array unidimensional
+    game_array = np.concatenate([
+        [rating], 
+        primary_genres_array, 
+        genres_array, 
+        game_engines_array, 
+        award_categories_array
+    ])
+    
+    return game_array
+
+def create_numpy_array_for_game(game: GamePredictionTrain, genres_mapping, game_engines_mapping, award_categories_mapping):
+    #In the future it will be used our rating
+    rating = float(game.steam_rating) * 0.005
+    rating = rating 
+    
+    genres_array = np.zeros(len(genres_mapping))
+    for genre in game.genres.split(','):
+        if genre in genres_mapping:
+            genres_array[genres_mapping[genre]] = 1
+            
+    primary_genres_array = np.zeros(len(genres_mapping))
+    if game.primary_genre in genres_mapping:
+        primary_genres_array[genres_mapping[game.primary_genre]] = 1
+            
+    game_engines_array = np.zeros(len(game_engines_mapping))
+    for engine in game.detected_technologies:
+        if engine in game_engines_mapping:
+            game_engines_array[game_engines_mapping[engine]] = 1
+
+    award_categories_array = np.zeros(len(award_categories_mapping))
+    for award in game.award_names:
+        if award in award_categories_mapping:
+            award_categories_array[award_categories_mapping[award]] = 1
+
     game_array = np.concatenate([
         [rating], 
         primary_genres_array, 
@@ -535,4 +563,30 @@ async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
     return combined_array
     
     
+async def faiss_trainer(db: AsyncSession):
+    games = await get_all_games_as_predictions(db)
     
+    genres_mapping = {genre: index for index, genre in enumerate(utils.genres)}
+    game_engines_mapping = {engine: index for index, engine in enumerate(utils.game_engines)}
+    award_categories_mapping = {category: index for index, category in enumerate(utils.award_categories)}
+    
+    numpy_arrays = [create_numpy_array_for_game(game, genres_mapping, game_engines_mapping, award_categories_mapping).flatten() for game in games]
+    
+    vectors = np.array(numpy_arrays).astype('float32')
+    dimension = vectors.shape[1]
+    
+    nlist = 670
+    quantizer = faiss.IndexFlatL2(dimension)
+    
+    index = faiss.IndexIVFFlat(quantizer, dimension, nlist, faiss.METRIC_L2)
+    
+    index.train(vectors)
+    index.add(vectors)
+    
+    for i, game in enumerate(games):
+        game_vector = models.game_vectors(game_id=game.id, faiss_index=i)
+
+        db.add(game_vector)
+
+        
+    await db.commit()

@@ -87,3 +87,8 @@ class Users_wishlist(Base):
     __tablename__= 'users_wishlist'
     game_id = Column(Integer, ForeignKey('games.id'), primary_key=True)
     user_nickname = Column(String(16), ForeignKey('users.nickname'), primary_key=True)
+    
+class game_vectors(Base):
+    __tablename__ = 'game_vectors'
+    game_id = Column(Integer, ForeignKey('games.id'), primary_key=True)
+    faiss_index = Column(Integer)

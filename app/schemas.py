@@ -43,6 +43,10 @@ class GamePrediction(BaseModel):
     platform_rating: float
     detected_technologies: str
     award_names: List[str]
+    
+class GamePredictionTrain(GamePrediction):
+    id: int
+    pass
 
 class GameUpdate(BaseModel):
     title: Optional[str]
@@ -172,6 +176,9 @@ class AwardBase(BaseModel):
     description: str
     category: str
 
+class GameVectors(BaseModel):
+    game_id: int
+    faiss_index: int
 
 #Auth
 class Token(BaseModel):
