@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from ...crud import add_review_by_nickname, get_user_reviews, delete_review
+from ...crud import add_review_by_nickname, get_user_reviews, delete_review, get_user_review
 from ...schemas import ReviewCreate
 from ...dependencies import get_async_db
 from ...models import User
@@ -44,7 +44,7 @@ async def read_reviews(nickname:str, db: AsyncSession = Depends(get_async_db)):
             tags=["Reviews"]    
             )
 async def read_reviews(id:int, nickname:str, db: AsyncSession = Depends(get_async_db)):
-    db_review = await get_user_reviews(db, user_nickname=nickname, review_id=id)
+    db_review = await get_user_review(db, user_nickname=nickname, game_id=id)
     if db_review is None:
         raise HTTPException(status_code=404, detail="User not found")
     return db_review

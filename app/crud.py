@@ -342,8 +342,8 @@ async def get_user_reviews(db: AsyncSession, user_nickname: str):
     return reviews
 
 
-async def get_user_review(db: AsyncSession, user_nickname: str, review_id: int):
-    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.id == review_id)
+async def get_user_review(db: AsyncSession, user_nickname: str, game_id: int):
+    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.game_id == game_id)
     result = await db.execute(query)
     review = result.scalars().first()
     return review
@@ -561,40 +561,6 @@ def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engin
     
     return game_array
 
-def create_numpy_array_for_game(game: GamePredictionTrain, genres_mapping, game_engines_mapping, award_categories_mapping):
-    #In the future it will be used our rating
-    rating = float(game.steam_rating) * 0.005
-    rating = rating 
-    
-    genres_array = np.zeros(len(genres_mapping))
-    for genre in game.genres.split(','):
-        if genre in genres_mapping:
-            genres_array[genres_mapping[genre]] = 1
-            
-    primary_genres_array = np.zeros(len(genres_mapping))
-    if game.primary_genre in genres_mapping:
-        primary_genres_array[genres_mapping[game.primary_genre]] = 1
-            
-    game_engines_array = np.zeros(len(game_engines_mapping))
-    for engine in game.detected_technologies:
-        if engine in game_engines_mapping:
-            game_engines_array[game_engines_mapping[engine]] = 1
-
-    award_categories_array = np.zeros(len(award_categories_mapping))
-    for award in game.award_names:
-        if award in award_categories_mapping:
-            award_categories_array[award_categories_mapping[award]] = 1
-
-    game_array = np.concatenate([
-        [rating], 
-        primary_genres_array, 
-        genres_array, 
-        game_engines_array, 
-        award_categories_array
-    ])
-    
-    return game_array
-
 
 async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
     games1 = await get_user_reviews_games(db, user_nickname)
@@ -632,6 +598,21 @@ async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
         combined_array = np.vstack(numpy_arrays)
     else:
         combined_array = np.array([])
+        
+    index = faiss.read_index("games.index")
+    vectors = np.array(combined_array).astype('float32')
+    
+    # Buscar los 10 vecinos más cercanos
+    k = 10
+    index.nprobe = 50
+    
+    distances, indexes = index.search(vectors, k)
+    
+    print("Índices de juegos similares y sus distancias:")
+    for i, (dist, idx) in enumerate(zip(distances[0], indexes[0])):
+        print(f"{i + 1}: Juego {idx} con distancia {dist}")
+    
+    
 
     return combined_array
     
