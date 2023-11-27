@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data, create_numpy_arrays, delete_follower
+from ...crud import get_user_no_password, get_user_details, add_user, add_follower, get_user_followers_and_following, update_user_data, create_numpy_arrays, delete_follower, get_all_users
 from ...schemas import UserBase, UserRead, UserCreate, UserUpdate, UserDetails, UserFollower, FollowerDetails, Token
 from ...dependencies import get_db, get_async_db
 from ...config import settings
@@ -28,6 +28,12 @@ async def read_user(nickname: str, db: Session = Depends(get_async_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
+#get all users
+async def get_andigames_users(db: AsyncSession = Depends(get_async_db)):
+    db_users = await get_all_users(db)
+    if db_users is None:
+        raise HTTPException(status_code=404, detail="Users not found")
+    return db_users
 
 #get user details
 @router.get(

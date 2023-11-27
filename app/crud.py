@@ -210,6 +210,12 @@ async def get_user_details(db: AsyncSession, user_nickname: str) -> UserDetails:
             
     return {"error": "Database error after 3 retries"}
 
+async def get_all_users(db: AsyncSession):
+    query = select(models.User)
+    result = await db.execute(query)
+    users = result.scalars().all()
+    return users
+
 
 # Get followers and following with details 
 def get_user_followers_and_following(db: Session, user_nickname: str) -> FollowerDetails:
