@@ -8,8 +8,9 @@ from...api.auth import get_current_user
 
 router = APIRouter()
 
-@router.post("/reviews/add/{nickname}/",
+@router.post("/reviews/add/{nickname}",
             summary="Añadir una reseña a un usuario",
+            response_model = ReviewCreate,
             description="Esta ruta permite añadir una reseña a un usuario.",
             response_description="Retorna la reseña añadida",
             tags=["Reviews"]
