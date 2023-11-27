@@ -19,7 +19,7 @@ class Game(Base):
     primary_genre = Column(String(32))
     genres = Column(String)
     steam_rating = Column(Numeric(4,2))
-    platform_rating = Column(Numeric(2,1))
+    platform_rating = Column(Numeric(3,1))
     publisher = Column(String)
     detected_technologies = Column(String)
     developer = Column(String)
@@ -61,7 +61,7 @@ class Review(Base):
     game_id = Column(Integer, ForeignKey('games.id'))
     user_nickname = Column(String(16), ForeignKey('users.nickname'))
     review_date = Column(Date)
-    rating = Column(Numeric(2,1))
+    rating = Column(Numeric(3,1))
     commentary = Column(String(256))
     
 class Award(Base):
