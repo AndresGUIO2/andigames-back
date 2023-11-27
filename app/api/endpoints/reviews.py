@@ -60,7 +60,7 @@ async def delete_review_by_game_id_and_review(id:int, nickname:str, db: AsyncSes
     if current_user.nickname != nickname:
         raise HTTPException(status_code=401, detail="Unauthorized")
     
-    review_deleted = await delete_review(db, user_nickname=nickname, review_id=id)
+    review_deleted = await delete_review(db, user_nickname=nickname, game_id=id)
     if not review_deleted:
         raise HTTPException(status_code=404, detail="Review not found")
 

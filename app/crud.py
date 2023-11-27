@@ -355,8 +355,8 @@ async def get_user_review(db: AsyncSession, user_nickname: str, game_id: int):
     return review
 
 
-async def delete_review(db: AsyncSession, user_nickname: str, review_id: int):
-    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.id == review_id)
+async def delete_review(db: AsyncSession, user_nickname: str, game_id: int):
+    query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Game.id == game_id)
     result = await db.execute(query)
     review = result.scalars().first()
 
