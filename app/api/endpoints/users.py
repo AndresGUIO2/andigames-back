@@ -165,27 +165,27 @@ def create_follower(nickname: str, follower: str, db: Session = Depends(get_db),
 
 
 @router.delete(
-        "/users/{nickname}/followers/delete/users/{follower}", 
-        response_model=UserFollower,
-        summary="Eliminar un seguidor a un usuario, se lleva a cabo por el usuario que sigue quien debe estar autenticado",
-        description="El usuario que sigue debe estar autenticado para dejar de seguir a alguien",
-        tags=["Users"]
-    )
-async def delete_follower(nickname: str, follower: str, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):   
-        if current_user.nickname != follower:
-            raise HTTPException(status_code=403, detail="User not authorized")
-        
-        db_user = await get_user_no_password(db, nickname=nickname)
-        db_follower = await get_user_no_password(db, nickname=follower)
-        if db_user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        if db_follower is None:
-            raise HTTPException(status_code=404, detail="Follower not found")
-        
-        user_data : UserFollower = UserFollower(user_follower_nickname=follower, user_following_nickname=nickname)
-        
-        return await delete_follower(db=db, followerData=user_data)
+    "/users/{nickname}/followers/delete/users/{follower}", 
+    response_model=UserFollower,
+    summary="Eliminar un seguidor a un usuario, se lleva a cabo por el usuario que sigue quien debe estar autenticado",
+    description="El usuario que sigue debe estar autenticado para dejar de seguir a alguien",
+    tags=["Users"]
+)
+async def delete_follower_by_nickname(nickname: str, follower: str, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):   
+    if current_user.nickname != follower:
+        raise HTTPException(status_code=403, detail="User not authorized")
+    
+    db_user = await get_user_no_password(db, nickname=nickname)
+    db_follower = await get_user_no_password(db, nickname=follower)
+    if db_user is None or db_follower is None:
+        raise HTTPException(status_code=404, detail="User or Follower not found")
 
+    user_data = UserFollower(user_follower_nickname=follower, user_following_nickname=nickname)
+    deleted_follower = await delete_follower(db, user_data)
+    if deleted_follower is None:
+        raise HTTPException(status_code=404, detail="Follower relationship not found")
+
+    return deleted_follower
 
 #Auth
 @router.post("/token", response_model=Token, tags=["AUTH"])

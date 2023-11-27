@@ -308,8 +308,14 @@ def add_follower(db: Session, followerData: UserFollower):
 async def delete_follower(db: AsyncSession, followerData: UserFollower):
     query = select(models.User_followers).filter(models.User_followers.user_follower_nickname == followerData.user_follower_nickname).filter(models.User_followers.user_following_nickname == followerData.user_following_nickname)
     result = await db.execute(query)
-    follower = result.scalars().first()
-    return follower
+    db_follower = result.scalars().first()
+    if db_follower is not None:
+        await db.delete(db_follower)  # Usar 'await' aquí
+        await db.commit()
+        return db_follower
+    else:
+        print("No se encontró la relación de seguidor para eliminar")
+        return None
 
 
 #Reviews
@@ -650,10 +656,13 @@ async def faiss_trainer(db: AsyncSession):
     index.train(vectors)
     index.add(vectors)
     
-    for i, game in enumerate(games):
-        game_vector = models.game_vectors(game_id=game.id, faiss_index=i)
+    faiss.write_index(index, "games.index")
 
-        db.add(game_vector)
+    
+    # for i, game in enumerate(games):
+    #     game_vector = models.game_vectors(game_id=game.id, faiss_index=i)
+
+    #     db.add(game_vector)
 
         
-    await db.commit()
+    # await db.commit()
