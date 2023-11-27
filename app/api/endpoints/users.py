@@ -207,20 +207,20 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 # Tests
-@router.get("/users/{nickname}/game_array", 
-            summary="Obtener el arreglo de juegos de un usuario",
-            description="Esta ruta te permite obtener el arreglo de juegos de un usuario basado en sus reseñas y juegos similares.",
-            response_description="Retorna un arreglo de juegos en formato JSON.",
-            tags=["Users"]
-)
-async def get_user_game_array(nickname: str, db: AsyncSession = Depends(get_async_db)):
-    # Obtén el arreglo de Numpy para el usuario
-    numpy_array = await create_numpy_arrays(db, nickname)
+# @router.get("/users/{nickname}/game_array", 
+#             summary="Obtener el arreglo de juegos de un usuario",
+#             description="Esta ruta te permite obtener el arreglo de juegos de un usuario basado en sus reseñas y juegos similares.",
+#             response_description="Retorna un arreglo de juegos en formato JSON.",
+#             tags=["Users"]
+# )
+# async def get_user_game_array(nickname: str, db: AsyncSession = Depends(get_async_db)):
+#     # Obtén el arreglo de Numpy para el usuario
+#     numpy_array = await create_numpy_arrays(db, nickname)
 
-    # Convierte el arreglo de Numpy a JSON (lista de Python)
-    json_array = numpy_array_to_json(numpy_array)
+#     # Convierte el arreglo de Numpy a JSON (lista de Python)
+#     json_array = numpy_array_to_json(numpy_array)
 
-    return json_array
+#     return json_array
 
-def numpy_array_to_json(array: np.ndarray) -> List:
-    return array.tolist()
+# def numpy_array_to_json(array: np.ndarray) -> List:
+#     return array.tolist()

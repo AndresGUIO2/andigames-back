@@ -60,11 +60,12 @@ async def read_reviews(id:int, nickname:str, db: AsyncSession = Depends(get_asyn
     if current_user.nickname != nickname:
         raise HTTPException(status_code=401, detail="Unauthorized")
     
-    db_review = await delete_review(db, user_nickname=nickname, review_id=id)
-    if db_review is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    review_deleted = await delete_review(db, user_nickname=nickname, review_id=id)
+    if not review_deleted:
+        raise HTTPException(status_code=404, detail="Review not found")
 
-    return db_review
+    return {"detail": "Review deleted successfully"}
+
 
 
 @router.put("/reviews/{nickname}/{id}/update",

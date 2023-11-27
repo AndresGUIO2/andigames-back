@@ -6,7 +6,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import func, desc
 from time import sleep
 from . import models
-from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate, GamePredictionTrain, ReviewUpdate
+from .schemas import UserDetails, UserSimple ,UserCreate, UserFollower, UserNicknameUsernameReviews, FollowerDetails, ReviewRead, UserUpdate, GamePrediction, ReviewCreate, GamePredictionTrain, ReviewUpdate, GameRead
 import numpy as np
 from typing import List
 from . import utils
@@ -353,7 +353,15 @@ async def delete_review(db: AsyncSession, user_nickname: str, review_id: int):
     query = select(models.Review).filter(models.Review.user_nickname == user_nickname).filter(models.Review.id == review_id)
     result = await db.execute(query)
     review = result.scalars().first()
-    return review
+
+    if review:
+        await db.delete(review)
+        await db.commit()
+        return True
+    else:
+        return False
+
+
 
 
 async def update_review(db: AsyncSession, user_nickname: str, review_id: int, review: ReviewUpdate):
@@ -528,7 +536,7 @@ async def get_user_whishlist_games(db: AsyncSession, user_nickname: str):
 
 def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engines_mapping, award_categories_mapping):
     #In the future it will be used our rating
-    rating = float(game.steam_rating) * 0.005
+    rating = float(game.steam_rating) * 0.01
     rating = rating 
     
     genres_array = np.zeros(len(genres_mapping))
@@ -599,23 +607,37 @@ async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
     else:
         combined_array = np.array([])
         
-    index = faiss.read_index("games.index")
     vectors = np.array(combined_array).astype('float32')
     
-    # Buscar los 10 vecinos más cercanos
-    k = 10
-    index.nprobe = 50
+    return vectors
+
+
+async def get_games_predictions(db: AsyncSession, user_nickname: str, k: int = 10):
+    vectors = await create_numpy_arrays(db, user_nickname)
+    index = faiss.read_index("games.index")
+    index.nprobe = 350 # Número de clusters a buscar
     
     distances, indexes = index.search(vectors, k)
     
     print("Índices de juegos similares y sus distancias:")
     for i, (dist, idx) in enumerate(zip(distances[0], indexes[0])):
         print(f"{i + 1}: Juego {idx} con distancia {dist}")
-    
-    
+        
+    game_ids = [await get_games_id_from_faiss(db, idx) for idx in indexes[0]]
 
-    return combined_array
-    
+    result = await db.execute(select(models.Game).where(models.Game.id.in_(game_ids)))
+    games_db = result.scalars().all()
+
+    games_read = [GameRead(**game.__dict__) for game in games_db]
+    return games_read
+
+
+async def get_games_id_from_faiss(db: AsyncSession, faiss_index: int):
+    query = select(models.Game_vectors).filter(models.Game_vectors.faiss_index == faiss_index)
+    result = await db.execute(query)
+    game = result.scalars().first()
+    return game.game_id    
+
     
 async def faiss_trainer(db: AsyncSession):
     games = await get_all_games_as_predictions(db)
@@ -640,10 +662,10 @@ async def faiss_trainer(db: AsyncSession):
     faiss.write_index(index, "games.index")
 
     
-    # for i, game in enumerate(games):
-    #     game_vector = models.game_vectors(game_id=game.id, faiss_index=i)
+    for i, game in enumerate(games):
+         game_vector = models.game_vectors(game_id=game.id, faiss_index=i)
 
-    #     db.add(game_vector)
+         db.add(game_vector)
 
         
-    # await db.commit()
+    await db.commit()
