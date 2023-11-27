@@ -56,7 +56,7 @@ async def read_reviews(id:int, nickname:str, db: AsyncSession = Depends(get_asyn
                 response_description="Retorna la reseña eliminada",
                 tags=["Reviews"]
                )
-async def read_reviews(id:int, nickname:str, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
+async def delete_review_by_game_id_and_review(id:int, nickname:str, db: AsyncSession = Depends(get_async_db), current_user: User = Depends(get_current_user)):
     if current_user.nickname != nickname:
         raise HTTPException(status_code=401, detail="Unauthorized")
     
