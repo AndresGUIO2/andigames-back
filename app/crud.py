@@ -552,7 +552,7 @@ def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engin
             
     primary_genres_array = np.zeros(len(genres_mapping))
     if game.primary_genre in genres_mapping:
-        primary_genres_array[genres_mapping[game.primary_genre]] = 1
+        primary_genres_array[genres_mapping[game.primary_genre]] = 0.1
             
     game_engines_array = np.zeros(len(game_engines_mapping))
     for engine in game.detected_technologies:
