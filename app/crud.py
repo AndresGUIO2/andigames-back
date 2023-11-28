@@ -368,8 +368,6 @@ async def delete_review(db: AsyncSession, user_nickname: str, game_id: int):
         return False
 
 
-
-
 async def update_review(db: AsyncSession, user_nickname: str, review_id: int, review: ReviewUpdate):
     existing_review = await get_user_review(db, user_nickname, review_id)
 
@@ -442,6 +440,7 @@ async def get_all_games_as_predictions(db: AsyncSession):
 
     return games_predictions
 
+
 async def get_user_reviews_games(db: AsyncSession, user_nickname: str):
 
     GameAlias = aliased(models.Game)
@@ -490,6 +489,7 @@ async def get_user_reviews_games(db: AsyncSession, user_nickname: str):
     games_predictions = [GamePrediction(**game) for game in games_temp.values()]
     
     return games_predictions
+
 
 async def get_user_whishlist_games(db: AsyncSession, user_nickname: str):
     
@@ -542,7 +542,7 @@ async def get_user_whishlist_games(db: AsyncSession, user_nickname: str):
 
 def create_numpy_array_for_game(game: GamePrediction, genres_mapping, game_engines_mapping, award_categories_mapping):
     #In the future it will be used our rating
-    rating = float(game.steam_rating) * 0.01
+    rating = float(game.steam_rating) * 0.008
     rating = rating 
     
     genres_array = np.zeros(len(genres_mapping))
@@ -586,13 +586,13 @@ async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
 
    
     for game in games1:
-        similar_games = await get_games_prediction(db, game.title, 40, 12)
+        similar_games = await get_games_prediction(db, game.title, 40, 9)
         for similar_game in similar_games:
             if similar_game not in all_games:  # Evitar duplicados
                 all_games.append(similar_game)
                 
-    for game in games2:
-        similar_games = await get_games_prediction(db, game.title, 40, 12)
+    #for game in games2:
+    #    similar_games = await get_games_prediction(db, game.title, 40, 4)
     
     # Mapping
     genres = utils.genres
@@ -621,21 +621,25 @@ async def create_numpy_arrays(db: AsyncSession, user_nickname: str):
 async def get_games_predictions(db: AsyncSession, user_nickname: str, k: int = 10):
     vectors = await create_numpy_arrays(db, user_nickname)
     index = faiss.read_index("games.index")
-    index.nprobe = 350 # Número de clusters a buscar
-    
-    distances, indexes = index.search(vectors, k)
-    
-    print("Índices de juegos similares y sus distancias:")
-    for i, (dist, idx) in enumerate(zip(distances[0], indexes[0])):
-        print(f"{i + 1}: Juego {idx} con distancia {dist}")
-        
-    game_ids = [await get_games_id_from_faiss(db, idx) for idx in indexes[0]]
+    index.nprobe = 100  # Ajusta esto según la necesidad de equilibrio entre velocidad y precisión
 
-    result = await db.execute(select(models.Game).where(models.Game.id.in_(game_ids)))
+    all_game_ids = set()
+
+    for v in vectors:
+        _, indexes = index.search(np.expand_dims(v, axis=0), k)
+        game_ids = [await get_games_id_from_faiss(db, idx) for idx in indexes[0]]
+        all_game_ids.update(game_ids)
+
+    query = select(models.Game).where(
+        models.Game.id.in_(all_game_ids), 
+        models.Game.steam_rating > 70
+    )
+
+    result = await db.execute(query)
     games_db = result.scalars().all()
 
-    games_read = [GameRead(**game.__dict__) for game in games_db]
-    return games_read
+    return [GameRead(**game.__dict__) for game in games_db]
+
 
 
 async def get_games_id_from_faiss(db: AsyncSession, faiss_index: int):

@@ -67,6 +67,22 @@ def read_user_followers_and_following(nickname: str, db: Session = Depends(get_d
     return db_user
 
 
+#get all users
+@router.get(
+    "/users",
+    response_model=List[UserRead],
+    summary="Obtener todos los usuarios",
+    description="Esta ruta te permite obtener todos los usuarios.",
+    response_description="Retorna todos los usuarios",
+    tags=["Users"]
+)
+async def read_all_users(db: AsyncSession = Depends(get_async_db)):
+    db_users = await get_andigames_users(db)
+    if db_users is None:
+        raise HTTPException(status_code=404, detail="Users not found")
+    return db_users
+
+
 @router.post(
     "/register",
     response_model=str,

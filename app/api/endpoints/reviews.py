@@ -68,7 +68,6 @@ async def delete_review_by_game_id_and_review(id:int, nickname:str, db: AsyncSes
     return {"detail": "Review deleted successfully"}
 
 
-
 @router.put("/reviews/{nickname}/{id}/update",
             summary="Actualizar una reseña de un usuario",
             description="Esta ruta permite actualizar una reseña de un usuario.",
